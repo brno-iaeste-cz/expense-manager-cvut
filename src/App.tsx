@@ -4,6 +4,8 @@ import {
   browserLocalPersistence,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  reload,
+  sendEmailVerification,
   setPersistence,
   signInWithEmailAndPassword,
   signOut,
@@ -38,6 +40,7 @@ const paymentMethods = [
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [, refreshAuthView] = useState(0);
 
   useEffect(() => {
     setPersistence(auth, browserLocalPersistence).catch(() => undefined);
@@ -51,7 +54,15 @@ function App() {
     return <LoadingScreen />;
   }
 
-  return user ? <ExpenseApp user={user} /> : <AuthScreen />;
+  if (!user) {
+    return <AuthScreen />;
+  }
+
+  if (!user.emailVerified) {
+    return <VerifyEmail user={user} onVerified={() => refreshAuthView((current) => current + 1)} />;
+  }
+
+  return <ExpenseApp user={user} />;
 }
 
 function LoadingScreen() {
@@ -183,6 +194,7 @@ function Register({ onShowSignIn }: { onShowSignIn: () => void }) {
     try {
       const credential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
       await updateProfile(credential.user, { displayName: normalizedName });
+      await sendEmailVerification(credential.user);
       await credential.user.getIdToken(true);
     } catch (error) {
       setError(getRegistrationErrorMessage(error));
@@ -260,6 +272,96 @@ function Register({ onShowSignIn }: { onShowSignIn: () => void }) {
             Zpět na přihlášení
           </button>
         </form>
+      </section>
+    </main>
+  );
+}
+
+function VerifyEmail({ user, onVerified }: { user: User; onVerified: () => void }) {
+  const [message, setMessage] = useState('Ověřovací e-mail byl odeslán.');
+  const [error, setError] = useState('');
+  const [busyAction, setBusyAction] = useState<'check' | 'send' | ''>('');
+
+  async function checkVerification() {
+    setBusyAction('check');
+    setError('');
+    setMessage('');
+
+    try {
+      await reload(user);
+      await user.getIdToken(true);
+
+      if (auth.currentUser?.emailVerified || user.emailVerified) {
+        onVerified();
+        return;
+      }
+
+      setError('E-mail zatím není ověřený.');
+    } catch {
+      setError('Ověření se nepodařilo zkontrolovat.');
+    } finally {
+      setBusyAction('');
+    }
+  }
+
+  async function resendVerification() {
+    setBusyAction('send');
+    setError('');
+    setMessage('');
+
+    try {
+      await sendEmailVerification(user);
+      setMessage('Ověřovací e-mail byl znovu odeslán.');
+    } catch {
+      setError('Ověřovací e-mail se nepodařilo odeslat.');
+    } finally {
+      setBusyAction('');
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-mist px-4 py-8 sm:px-6">
+      <section className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md items-center">
+        <div className="w-full rounded-lg border border-line bg-white p-5 shadow-panel sm:p-7">
+          <div className="mb-7">
+            <p className="text-sm font-bold uppercase tracking-wide text-brand">IAESTE LC Brno</p>
+            <h1 className="mt-2 text-3xl font-bold text-ink">Ověření e-mailu</h1>
+          </div>
+
+          <p className="text-sm leading-6 text-ink/70">
+            Pro pokračování ověřte e-mailovou adresu <strong className="text-ink">{user.email}</strong>. Po kliknutí
+            na odkaz v e-mailu se vraťte sem a zkontrolujte ověření.
+          </p>
+
+          {message ? <p className="mt-4 rounded-md bg-green-100 px-3 py-2 text-sm text-green-800">{message}</p> : null}
+          {error ? <p className="mt-4 rounded-md bg-coral/10 px-3 py-2 text-sm text-coral">{error}</p> : null}
+
+          <button
+            className="mt-6 w-full rounded-md bg-brand px-4 py-3 font-bold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={Boolean(busyAction)}
+            onClick={() => void checkVerification()}
+            type="button"
+          >
+            {busyAction === 'check' ? 'Kontroluji...' : 'Zkontrolovat ověření'}
+          </button>
+
+          <button
+            className="mt-3 w-full rounded-md border border-line bg-white px-4 py-3 font-bold text-ink transition hover:border-brand hover:text-brand disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={Boolean(busyAction)}
+            onClick={() => void resendVerification()}
+            type="button"
+          >
+            {busyAction === 'send' ? 'Odesílám...' : 'Poslat e-mail znovu'}
+          </button>
+
+          <button
+            className="mt-3 w-full rounded-md border border-line bg-white px-4 py-3 font-bold text-ink/70 transition hover:border-coral hover:text-coral"
+            onClick={() => void signOut(auth)}
+            type="button"
+          >
+            Odhlásit se
+          </button>
+        </div>
       </section>
     </main>
   );

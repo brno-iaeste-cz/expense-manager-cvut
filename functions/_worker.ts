@@ -15,6 +15,7 @@ type AuthUser = {
   uid: string;
   email: string;
   name: string;
+  emailVerified: boolean;
 };
 
 type Variables = {
@@ -69,12 +70,22 @@ app.use('/expenses', async (c, next) => {
       issuer: `https://securetoken.google.com/${c.env.FIREBASE_PROJECT_ID}`,
     });
 
+    const emailVerified = payload.email_verified === true;
+    if (!emailVerified) {
+      throw new HTTPException(403, { message: 'Email address is not verified.' });
+    }
+
     c.set('user', {
       uid: payload.sub ?? '',
       email: typeof payload.email === 'string' ? payload.email : '',
       name: typeof payload.name === 'string' ? payload.name : '',
+      emailVerified,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof HTTPException) {
+      throw error;
+    }
+
     throw new HTTPException(401, { message: 'Invalid authorization token.' });
   }
 
