@@ -100,6 +100,42 @@ Payment Method, Receipt URL, User Email, User UID
 
 The Apps Script appends data in that order.
 
+## Category Sync
+
+Expense departments, categories, and subcategories are generated into `src/categories.ts` from the budgeting Google Sheet.
+
+Run a manual sync:
+
+```bash
+npm run categories:sync
+```
+
+The default source spreadsheet is:
+
+```text
+https://docs.google.com/spreadsheets/d/1dMACC3Gyeor0Xv-mh0sN1y7sDOepLLiNeljMUqwdjWE/edit
+```
+
+The sync reads these sheet tabs:
+
+```text
+PR, HR, EX, Akce, Projekty, Cesťák
+```
+
+Only tabs that contain category blocks are written to `src/categories.ts`. A category block is detected by a `Výdaje` cell in the second row. The category name is read from the first row of that same column, and subcategories are read from the same column under `Odvětví` until `Cena`.
+
+`npm run build` runs the sync automatically before building. This prebuild sync is optional: if the spreadsheet cannot be downloaded, the build continues with the last generated `src/categories.ts`.
+
+To use a different spreadsheet or tab list:
+
+```powershell
+$env:EXPENSES_SPREADSHEET_ID="..."
+$env:CATEGORIES_DEPARTMENT_SHEETS="PR,HR,EX,Akce,Projekty"
+npm run categories:sync
+```
+
+The spreadsheet must be readable by the machine running the command.
+
 ## Cloudflare Pages
 
 Set these variables in Cloudflare Pages project settings:

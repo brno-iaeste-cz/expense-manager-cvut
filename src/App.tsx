@@ -17,9 +17,13 @@ const emptyForm: ExpenseForm = {
   amount: '',
   department: 'PR',
   category: 'Promo akce',
-  subcategory: 'Záškolovák',
+  subcategory: 'Zaškolovák 1+2',
   paymentMethod: 'Invoice',
 };
+
+const categoriesSpreadsheetId =
+  import.meta.env.EXPENSES_SPREADSHEET_ID ?? '1dMACC3Gyeor0Xv-mh0sN1y7sDOepLLiNeljMUqwdjWE';
+const categoriesSpreadsheetUrl = `https://docs.google.com/spreadsheets/d/${categoriesSpreadsheetId}/edit`;
 
 const paymentMethods = [
   { value: 'Invoice', label: 'Faktura' },
@@ -169,12 +173,26 @@ function ExpenseApp({ user }: { user: User }) {
       form.name.trim() &&
       form.category.trim() &&
       form.subcategory.trim() &&
-      Number(form.amount) > 0,
+        parseAmount(form.amount) > 0,
     );
   }, [form, receipt]);
 
   function updateField<Key extends keyof ExpenseForm>(key: Key, value: ExpenseForm[Key]) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateAmount(value: string) {
+    const normalized = value.replace('.', ',').replace(/[^0-9,]/g, '');
+    const [whole = '', ...decimalParts] = normalized.split(',');
+    const decimal = decimalParts.join('').slice(0, 2);
+    updateField('amount', decimalParts.length > 0 ? `${whole},${decimal}` : whole);
+  }
+
+  function formatAmount() {
+    const amount = parseAmount(form.amount);
+    if (Number.isFinite(amount) && amount > 0) {
+      updateField('amount', amount.toFixed(2).replace('.', ','));
+    }
   }
 
   function updateDepartment(department: string) {
@@ -219,7 +237,9 @@ function ExpenseApp({ user }: { user: User }) {
     setMessage('');
 
     const payload = new FormData();
-    Object.entries(form).forEach(([key, value]) => payload.append(key, value));
+    Object.entries(form).forEach(([key, value]) => {
+      payload.append(key, key === 'amount' ? value.replace(',', '.') : value);
+    });
     payload.append('receipt', receipt);
 
     try {
@@ -252,12 +272,12 @@ function ExpenseApp({ user }: { user: User }) {
     <main className="min-h-screen bg-[#f5f7f8]">
       <header className="border-b border-line bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-bold uppercase tracking-wide text-brand">IAESTE LC Brno</p>
             <h1 className="text-xl font-bold text-ink sm:text-2xl">Expense manager</h1>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="hidden max-w-56 truncate text-sm text-ink/70 sm:block">{formattedUser}</span>
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="max-w-36 truncate text-sm text-ink/70 sm:max-w-56">{formattedUser}</span>
             <button className="icon-button" onClick={() => void signOut(auth)} type="button" title="Odhlásit se">
               <LogOutIcon />
             </button>
@@ -265,18 +285,12 @@ function ExpenseApp({ user }: { user: User }) {
         </div>
       </header>
 
-      <section className="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:py-10">
-        <ReceiptPanel receipt={receipt} previewUrl={previewUrl} onReceiptChange={setReceipt} />
-
-        <form onSubmit={submitExpense} className="rounded-lg border border-line bg-white p-4 shadow-panel sm:p-6">
+      <form onSubmit={submitExpense} className="mx-auto grid max-w-3xl gap-6 px-4 py-6 sm:px-6 lg:py-10">
+        <section className="rounded-lg border border-line bg-white p-4 shadow-panel sm:p-6">
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-xl font-bold text-ink">Transakce</h2>
-              <p className="mt-1 text-sm text-ink/65">
-                Povinné položky jsou účtenka, název, částka, kategorie a subkategorie.
-              </p>
+              <h2 className="text-xl font-bold text-ink">Výdaj</h2>
             </div>
-            <span className="rounded-md bg-gold/15 px-2.5 py-1 text-sm font-bold text-[#7a4d00]">CZK</span>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -291,17 +305,22 @@ function ExpenseApp({ user }: { user: User }) {
             </Field>
 
             <Field label="Částka" id="amount">
-              <input
-                id="amount"
-                className="field"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                type="number"
-                value={form.amount}
-                onChange={(event) => updateField('amount', event.target.value)}
-                required
-              />
+              <div className="relative">
+                <input
+                  id="amount"
+                  className="field pr-16"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  type="text"
+                  value={form.amount}
+                  onBlur={formatAmount}
+                  onChange={(event) => updateAmount(event.target.value)}
+                  required
+                />
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-bold text-ink/55">
+                  CZK
+                </span>
+              </div>
             </Field>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -416,24 +435,35 @@ function ExpenseApp({ user }: { user: User }) {
             </div>
           </div>
 
-          {message ? (
-            <p
-              className={`mt-5 rounded-md px-3 py-2 text-sm font-semibold ${status === 'success' ? 'bg-brand/10 text-brand' : 'bg-coral/10 text-coral'
-                }`}
-            >
-              {message}
-            </p>
-          ) : null}
+        </section>
 
-          <button
-            className="mt-5 w-full rounded-md bg-brand px-4 py-3 font-bold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={!canSubmit || status === 'submitting'}
-            type="submit"
+        <ReceiptPanel receipt={receipt} previewUrl={previewUrl} onReceiptChange={setReceipt} />
+
+        {message ? (
+          <p
+            className={`rounded-md px-3 py-2 text-sm font-semibold ${status === 'success' ? 'bg-green-100 text-green-800' : 'bg-coral/10 text-coral'
+              }`}
           >
-            {status === 'submitting' ? 'Ukládám...' : 'Uložit výdaj'}
-          </button>
-        </form>
-      </section>
+            {message}
+          </p>
+        ) : null}
+
+        <button
+          className="w-full rounded-md bg-brand px-4 py-3 font-bold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={!canSubmit || status === 'submitting'}
+          type="submit"
+        >
+          {status === 'submitting' ? 'Ukládám...' : 'Uložit výdaj'}
+        </button>
+        <a
+          className="block w-full rounded-md border border-line bg-white px-4 py-3 text-center font-bold text-ink transition hover:border-brand hover:text-brand focus:outline-none focus:ring-4 focus:ring-brand/15"
+          href={categoriesSpreadsheetUrl}
+          rel="noreferrer"
+          target="_blank"
+        >
+          Otevřít tabulku výdajů
+        </a>
+      </form>
     </main>
   );
 }
@@ -479,7 +509,7 @@ function ReceiptPanel({
         </label>
       </div>
 
-      <div className="mt-5 flex aspect-[4/5] min-h-80 items-center justify-center overflow-hidden rounded-md border border-dashed border-line bg-mist">
+      <div className="mt-5 flex aspect-[7/5] min-h-80 items-center justify-center overflow-hidden rounded-md border border-dashed border-line bg-mist">
         {previewUrl ? (
           <img className="h-full w-full object-contain" src={previewUrl} alt="Náhled účtenky" />
         ) : (
@@ -520,6 +550,10 @@ function normalizeText(value: string) {
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim();
+}
+
+function parseAmount(value: string) {
+  return Number(value.replace(',', '.'));
 }
 
 function CameraIcon() {
