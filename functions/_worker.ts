@@ -82,20 +82,27 @@ app.use('/expenses', async (c, next) => {
 });
 
 app.post('/expenses', async (c) => {
-  const body = await c.req.parseBody();
-  const receipt = body.receipt;
+  let body: FormData;
+  try {
+    body = await c.req.raw.formData();
+  } catch (error) {
+    console.error('Could not parse expense form data', error);
+    throw new HTTPException(400, { message: 'Could not read submitted form data.' });
+  }
 
-  if (!(receipt instanceof File)) {
+  const receipt = body.get('receipt');
+
+  if (!isUploadedFile(receipt)) {
     throw new HTTPException(400, { message: 'Receipt image is required.' });
   }
 
   const parsedExpense = expenseSchema.safeParse({
-    name: body.name,
-    amount: body.amount,
-    department: body.department,
-    category: body.category,
-    subcategory: body.subcategory,
-    paymentMethod: body.paymentMethod,
+    name: getFormValue(body, 'name'),
+    amount: getFormValue(body, 'amount'),
+    department: getFormValue(body, 'department'),
+    category: getFormValue(body, 'category'),
+    subcategory: getFormValue(body, 'subcategory'),
+    paymentMethod: getFormValue(body, 'paymentMethod'),
   });
 
   if (!parsedExpense.success) {
@@ -104,34 +111,18 @@ app.post('/expenses', async (c) => {
 
   const user = c.get('user');
   const imageBase64 = arrayBufferToBase64(await receipt.arrayBuffer());
-  const response = await fetch(c.env.APPS_SCRIPT_WEB_APP_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({
-      secret: c.env.APPS_SCRIPT_SECRET,
-      submittedAt: new Date().toISOString(),
-      user,
-      expense: parsedExpense.data,
-      receipt: {
-        filename: receipt.name,
-        mimeType: receipt.type || 'image/jpeg',
-        base64: imageBase64,
-      },
-    }),
+
+  const appsScriptPayload = await submitToAppsScript(c.env, {
+    secret: c.env.APPS_SCRIPT_SECRET,
+    submittedAt: new Date().toISOString(),
+    user,
+    expense: parsedExpense.data,
+    receipt: {
+      filename: receipt.name,
+      mimeType: receipt.type || 'image/jpeg',
+      base64: imageBase64,
+    },
   });
-
-  const appsScriptPayload = (await response.json().catch(() => null)) as {
-    ok?: boolean;
-    error?: string;
-    receiptFileId?: string;
-    receiptUrl?: string;
-  } | null;
-
-  if (!response.ok || !appsScriptPayload?.ok) {
-    throw new HTTPException(502, {
-      message: appsScriptPayload?.error ?? 'Apps Script could not save the expense.',
-    });
-  }
 
   return c.json({
     ok: true,
@@ -145,9 +136,53 @@ app.onError((error, c) => {
     return c.json({ error: error.message }, error.status);
   }
 
-  console.error(error);
-  return c.json({ error: 'Unexpected server error.' }, 500);
+  console.error('Unexpected Worker error', {
+    path: new URL(c.req.url).pathname,
+    message: getErrorMessage(error),
+    stack: error instanceof Error ? error.stack : undefined,
+  });
+
+  return c.json({ error: `Unexpected server error: ${getErrorMessage(error)}` }, 500);
 });
+
+async function submitToAppsScript(env: Env, payload: unknown) {
+  let response: Response;
+  try {
+    response = await fetch(env.APPS_SCRIPT_WEB_APP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    console.error('Apps Script request failed', error);
+    throw new HTTPException(502, { message: `Apps Script request failed: ${getErrorMessage(error)}` });
+  }
+
+  const responseText = await response.text();
+  const appsScriptPayload = parseJson(responseText) as {
+    ok?: boolean;
+    error?: string;
+    receiptFileId?: string;
+    receiptUrl?: string;
+  } | null;
+
+  if (!response.ok || !appsScriptPayload?.ok) {
+    console.error('Apps Script returned an error', {
+      status: response.status,
+      statusText: response.statusText,
+      payload: appsScriptPayload,
+      bodyPreview: responseText.slice(0, 500),
+    });
+
+    throw new HTTPException(502, {
+      message:
+        appsScriptPayload?.error ??
+        `Apps Script could not save the expense. Status: ${response.status} ${response.statusText}`,
+    });
+  }
+
+  return appsScriptPayload;
+}
 
 function assertEnv(env: Env) {
   const missing = Object.entries(getConfigPresence(env))
@@ -165,6 +200,34 @@ function getConfigPresence(env: Env) {
     APPS_SCRIPT_WEB_APP_URL: Boolean(env.APPS_SCRIPT_WEB_APP_URL),
     APPS_SCRIPT_SECRET: Boolean(env.APPS_SCRIPT_SECRET),
   };
+}
+
+function getFormValue(body: FormData, key: string) {
+  const value = body.get(key);
+  return typeof value === 'string' ? value : '';
+}
+
+function isUploadedFile(value: FormDataEntryValue | null): value is File {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'arrayBuffer' in value &&
+    typeof value.arrayBuffer === 'function' &&
+    'name' in value &&
+    typeof value.name === 'string'
+  );
+}
+
+function parseJson(value: string) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer) {
