@@ -37,13 +37,20 @@ APPS_SCRIPT_WEB_APP_URL=https://script.google.com/macros/s/.../exec
 APPS_SCRIPT_SECRET=use-a-long-random-secret
 ```
 
-Run the frontend only:
+Run the live development servers:
 
 ```bash
 npm run dev
 ```
 
-Build and run with Cloudflare Pages locally:
+This starts:
+
+- Vite at `http://localhost:5173`
+- Wrangler Worker API at `http://127.0.0.1:8788`
+
+Vite proxies `/api` requests to Wrangler, so the app can be used from `http://localhost:5173` with hot reload.
+
+Build and run the production-style Cloudflare Pages output locally:
 
 ```bash
 npm run build

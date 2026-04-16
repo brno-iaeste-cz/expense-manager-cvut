@@ -6,7 +6,7 @@ export default {
       colors: {
         ink: '#17212b',
         line: '#d7dee8',
-        brand: '#0c7c7a',
+        brand: '#0B3D59',
         coral: '#d85f4f',
         gold: '#d79a2b',
         mist: '#eef4f6',

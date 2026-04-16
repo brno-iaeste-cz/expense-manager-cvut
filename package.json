@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "vite",
+    "dev:api": "node scripts/worker-dev.mjs",
     "build": "tsc -b && vite build && node scripts/build-worker.mjs",
     "preview": "vite preview",
     "pages:dev": "node scripts/pages-dev.mjs"
