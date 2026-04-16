@@ -2,10 +2,12 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   User,
   browserLocalPersistence,
+  createUserWithEmailAndPassword,
   onAuthStateChanged,
   setPersistence,
   signInWithEmailAndPassword,
   signOut,
+  updateProfile,
 } from 'firebase/auth';
 import { auth } from './firebase';
 import { ExpenseForm, SubmissionState } from './types';
@@ -49,7 +51,7 @@ function App() {
     return <LoadingScreen />;
   }
 
-  return user ? <ExpenseApp user={user} /> : <SignIn />;
+  return user ? <ExpenseApp user={user} /> : <AuthScreen />;
 }
 
 function LoadingScreen() {
@@ -60,7 +62,17 @@ function LoadingScreen() {
   );
 }
 
-function SignIn() {
+function AuthScreen() {
+  const [mode, setMode] = useState<'signIn' | 'register'>('signIn');
+
+  return mode === 'signIn' ? (
+    <SignIn onShowRegister={() => setMode('register')} />
+  ) : (
+    <Register onShowSignIn={() => setMode('signIn')} />
+  );
+}
+
+function SignIn({ onShowRegister }: { onShowRegister: () => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -127,6 +139,126 @@ function SignIn() {
           >
             {busy ? 'Přihlašuji...' : 'Přihlásit se'}
           </button>
+
+          <button
+            className="mt-3 w-full rounded-md border border-line bg-white px-4 py-3 font-bold text-ink transition hover:border-brand hover:text-brand"
+            onClick={onShowRegister}
+            type="button"
+          >
+            Vytvořit účet
+          </button>
+        </form>
+      </section>
+    </main>
+  );
+}
+
+function Register({ onShowSignIn }: { onShowSignIn: () => void }) {
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+
+    const normalizedName = fullName.trim();
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedName) {
+      setError('Zadejte celé jméno.');
+      setBusy(false);
+      return;
+    }
+
+    if (!normalizedEmail.endsWith('@iaeste.cz')) {
+      setError('Registrace je povolena pouze pro e-mail s doménou iaeste.cz.');
+      setBusy(false);
+      return;
+    }
+
+    try {
+      const credential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
+      await updateProfile(credential.user, { displayName: normalizedName });
+      await credential.user.getIdToken(true);
+    } catch (error) {
+      setError(getRegistrationErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-mist px-4 py-8 sm:px-6">
+      <section className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md items-center">
+        <form
+          onSubmit={handleSubmit}
+          className="w-full rounded-lg border border-line bg-white p-5 shadow-panel sm:p-7"
+        >
+          <div className="mb-7">
+            <p className="text-sm font-bold uppercase tracking-wide text-brand">IAESTE LC Brno</p>
+            <h1 className="mt-2 text-3xl font-bold text-ink">Registrace</h1>
+          </div>
+
+          <label className="label" htmlFor="fullName">
+            Celé jméno
+          </label>
+          <input
+            id="fullName"
+            className="field mb-4"
+            autoComplete="name"
+            value={fullName}
+            onChange={(event) => setFullName(event.target.value)}
+            required
+          />
+
+          <label className="label" htmlFor="registerEmail">
+            E-mail
+          </label>
+          <input
+            id="registerEmail"
+            className="field mb-4"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+          />
+
+          <label className="label" htmlFor="registerPassword">
+            Heslo
+          </label>
+          <input
+            id="registerPassword"
+            className="field"
+            type="password"
+            autoComplete="new-password"
+            minLength={6}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+          />
+
+          {error ? <p className="mt-4 rounded-md bg-coral/10 px-3 py-2 text-sm text-coral">{error}</p> : null}
+
+          <button
+            className="mt-6 w-full rounded-md bg-brand px-4 py-3 font-bold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={busy}
+            type="submit"
+          >
+            {busy ? 'Vytvářím účet...' : 'Registrovat se'}
+          </button>
+
+          <button
+            className="mt-3 w-full rounded-md border border-line bg-white px-4 py-3 font-bold text-ink transition hover:border-brand hover:text-brand"
+            onClick={onShowSignIn}
+            type="button"
+          >
+            Zpět na přihlášení
+          </button>
         </form>
       </section>
     </main>
@@ -141,7 +273,7 @@ function ExpenseApp({ user }: { user: User }) {
   const [message, setMessage] = useState('');
   const [categorySearch, setCategorySearch] = useState('');
 
-  const formattedUser = user.email ?? 'Přihlášeno';
+  const formattedUser = user.displayName ?? 'Přihlášeno';
   const selectedCategories = categoryTree[form.department as keyof typeof categoryTree] ?? [];
   const selectedCategory = selectedCategories.find((category) => category.value === form.category);
   const selectedSubcategories = selectedCategory?.subcategories ?? [];
@@ -554,6 +686,24 @@ function normalizeText(value: string) {
 
 function parseAmount(value: string) {
   return Number(value.replace(',', '.'));
+}
+
+function getRegistrationErrorMessage(error: unknown) {
+  const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
+
+  if (code === 'auth/email-already-in-use') {
+    return 'Účet s tímto e-mailem už existuje.';
+  }
+
+  if (code === 'auth/weak-password') {
+    return 'Heslo musí mít alespoň 6 znaků.';
+  }
+
+  if (code === 'auth/invalid-email') {
+    return 'E-mail není ve správném formátu.';
+  }
+
+  return 'Registrace se nepodařila.';
 }
 
 function CameraIcon() {

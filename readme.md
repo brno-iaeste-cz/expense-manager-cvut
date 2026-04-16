@@ -104,7 +104,7 @@ Add this header row:
 
 ```text
 Submitted At, Name, Amount, Department, Category, Subcategory,
-Payment Method, Receipt URL, User Email, User UID
+Payment Method, Receipt URL, User Full Name, User Email, User UID
 ```
 
 The Apps Script appends data in that order.
@@ -169,6 +169,23 @@ Build output directory:
 
 ```bash
 dist
+```
+
+Deploy command:
+
+```text
+Leave empty
+```
+
+Do not use `npx wrangler deploy` as the Pages deploy command. That command deploys a
+Workers project and will try to auto-configure this Hono app as a Worker. Cloudflare
+Pages should upload the `dist` directory after the build; the build already writes the
+advanced Pages Worker to `dist/_worker.js`.
+
+For a manual local deploy outside the Cloudflare Pages Git integration, use:
+
+```bash
+npm run deploy:pages
 ```
 
 Also add your Cloudflare Pages domain to Firebase Authentication authorized domains before testing the deployed site.

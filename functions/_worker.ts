@@ -14,6 +14,7 @@ type Env = {
 type AuthUser = {
   uid: string;
   email: string;
+  name: string;
 };
 
 type Variables = {
@@ -71,6 +72,7 @@ app.use('/expenses', async (c, next) => {
     c.set('user', {
       uid: payload.sub ?? '',
       email: typeof payload.email === 'string' ? payload.email : '',
+      name: typeof payload.name === 'string' ? payload.name : '',
     });
   } catch {
     throw new HTTPException(401, { message: 'Invalid authorization token.' });

@@ -44,6 +44,7 @@ function doPost(e) {
       expense.subcategory,
       expense.paymentMethod,
       file.getUrl(),
+      user.name || '',
       user.email || '',
       user.uid || '',
     ]);
@@ -99,10 +100,10 @@ function writeExpenseToBudgetSpreadsheet(target, expense, user) {
   const amount = Number(expense.amount);
   const note = expense.name;
   let payer = '';
-  if (expense.paymentMethod != 'No document'){
+  if (expense.paymentMethod != 'Private'){
     payer = expense.paymentMethod || '';
   } else{
-    payer = expense.email || '';
+    payer = user.name || user.email || '';
   }
   
 
