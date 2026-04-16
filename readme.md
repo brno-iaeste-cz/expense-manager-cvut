@@ -71,6 +71,7 @@ http://127.0.0.1:8788
 4. In the script, set:
    - `sheetId`
    - `sheetName`
+   - `expensesSpreadsheetId`
    - `driveFolderId`
    - `secret`
 5. Click **Deploy** -> **New deployment**.
@@ -82,6 +83,14 @@ http://127.0.0.1:8788
 11. Use the same script `secret` value for `APPS_SCRIPT_SECRET`.
 
 The web app URL is public, so the secret must be long and unguessable. A good value is at least 32 random characters.
+
+`expensesSpreadsheetId` is the budget spreadsheet used for category tabs such as `PR`, `HR`, `EX`, `Akce`, and `Projekty`. When an expense is submitted, Apps Script appends the row to the `Expenses` tab and also writes the amount into the matching budget sheet block:
+
+- `department` selects the spreadsheet tab.
+- `category` selects the block whose first row contains the category name and whose second row contains `Výdaje`.
+- `subcategory` is written into the `Odvětví` column.
+
+Instead of hard-coding `expensesSpreadsheetId`, you can also set a Script Property named `EXPENSES_SPREADSHEET_ID`.
 
 ## Google Sheet
 
