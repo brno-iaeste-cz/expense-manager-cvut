@@ -94,8 +94,8 @@ Expenses
 Add this header row:
 
 ```text
-Submitted At, Transaction Date, Merchant, Amount, Currency, Category,
-Payment Method, Project/Event, Notes, Receipt URL, User Email, User UID
+Submitted At, Name, Amount, Department, Category, Subcategory,
+Payment Method, Receipt URL, User Email, User UID
 ```
 
 The Apps Script appends data in that order.

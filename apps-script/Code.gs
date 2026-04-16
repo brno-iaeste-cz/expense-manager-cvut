@@ -22,7 +22,7 @@ function doPost(e) {
     }
 
     const folder = DriveApp.getFolderById(CONFIG.driveFolderId);
-    const filename = buildReceiptFilename(expense.transactionDate, expense.merchant, receipt.filename);
+    const filename = buildReceiptFilename(expense.name, receipt.filename);
     const bytes = Utilities.base64Decode(receipt.base64);
     const blob = Utilities.newBlob(bytes, receipt.mimeType || 'image/jpeg', filename);
     const file = folder.createFile(blob);
@@ -34,14 +34,12 @@ function doPost(e) {
 
     sheet.appendRow([
       payload.submittedAt || new Date().toISOString(),
-      expense.transactionDate,
-      expense.merchant,
+      expense.name,
       expense.amount,
-      expense.currency,
+      expense.department,
       expense.category,
+      expense.subcategory,
       expense.paymentMethod,
-      expense.project || '',
-      expense.notes || '',
       file.getUrl(),
       user.email || '',
       user.uid || '',
@@ -61,15 +59,15 @@ function jsonResponse(payload) {
   return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON);
 }
 
-function buildReceiptFilename(transactionDate, merchant, originalName) {
+function buildReceiptFilename(name, originalName) {
   const extension = getExtension(originalName);
-  const merchantPart = String(merchant || 'receipt')
+  const namePart = String(name || 'expense')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '')
     .slice(0, 60);
 
-  return `${transactionDate || 'expense'}-${merchantPart}-${Utilities.getUuid()}${extension}`;
+  return `${namePart}-${Utilities.getUuid()}${extension}`;
 }
 
 function getExtension(filename) {

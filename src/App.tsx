@@ -9,20 +9,25 @@ import {
 } from 'firebase/auth';
 import { auth } from './firebase';
 import { ExpenseForm, SubmissionState } from './types';
+import { categorySearchIndex, categoryTree, departments } from './categories';
+import type { CategorySearchResult } from './categories';
 
 const emptyForm: ExpenseForm = {
-  transactionDate: new Date().toISOString().slice(0, 10),
-  merchant: '',
+  name: '',
   amount: '',
-  currency: 'EUR',
-  category: 'Office',
-  paymentMethod: 'Card',
-  project: '',
-  notes: '',
+  department: 'PR',
+  category: 'Promo akce',
+  subcategory: 'Záškolovák',
+  paymentMethod: 'Invoice',
 };
 
-const categories = ['Office', 'Travel', 'Accommodation', 'Food', 'Event', 'Marketing', 'Other'];
-const paymentMethods = ['Card', 'Cash', 'Bank transfer', 'Online'];
+const paymentMethods = [
+  { value: 'Invoice', label: 'Faktura' },
+  { value: 'Cash', label: 'Hotovost' },
+  { value: 'IA Card', label: 'IA karta' },
+  { value: 'Private', label: 'Soukromá platba' },
+  { value: 'No document', label: 'Bez dokladu' },
+];
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -65,7 +70,7 @@ function SignIn() {
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
     } catch {
-      setError('The email or password is incorrect.');
+      setError('E-mail nebo heslo není správné.');
     } finally {
       setBusy(false);
     }
@@ -84,7 +89,7 @@ function SignIn() {
           </div>
 
           <label className="label" htmlFor="email">
-            Email
+            E-mail
           </label>
           <input
             id="email"
@@ -97,7 +102,7 @@ function SignIn() {
           />
 
           <label className="label" htmlFor="password">
-            Password
+            Heslo
           </label>
           <input
             id="password"
@@ -116,7 +121,7 @@ function SignIn() {
             disabled={busy}
             type="submit"
           >
-            {busy ? 'Signing in...' : 'Sign in'}
+            {busy ? 'Přihlašuji...' : 'Přihlásit se'}
           </button>
         </form>
       </section>
@@ -130,8 +135,22 @@ function ExpenseApp({ user }: { user: User }) {
   const [previewUrl, setPreviewUrl] = useState('');
   const [status, setStatus] = useState<SubmissionState>('idle');
   const [message, setMessage] = useState('');
+  const [categorySearch, setCategorySearch] = useState('');
 
-  const formattedUser = user.email ?? 'Signed in';
+  const formattedUser = user.email ?? 'Přihlášeno';
+  const selectedCategories = categoryTree[form.department as keyof typeof categoryTree] ?? [];
+  const selectedCategory = selectedCategories.find((category) => category.value === form.category);
+  const selectedSubcategories = selectedCategory?.subcategories ?? [];
+  const categorySearchResults = useMemo(() => {
+    const query = normalizeText(categorySearch);
+    if (!query) return [];
+
+    return categorySearchIndex
+      .filter((item) =>
+        normalizeText(`${item.departmentLabel} ${item.categoryLabel} ${item.subcategory}`).includes(query),
+      )
+      .slice(0, 6);
+  }, [categorySearch]);
 
   useEffect(() => {
     if (!receipt) {
@@ -145,11 +164,51 @@ function ExpenseApp({ user }: { user: User }) {
   }, [receipt]);
 
   const canSubmit = useMemo(() => {
-    return Boolean(receipt && form.transactionDate && form.merchant && Number(form.amount) > 0);
+    return Boolean(
+      receipt &&
+      form.name.trim() &&
+      form.category.trim() &&
+      form.subcategory.trim() &&
+      Number(form.amount) > 0,
+    );
   }, [form, receipt]);
 
   function updateField<Key extends keyof ExpenseForm>(key: Key, value: ExpenseForm[Key]) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateDepartment(department: string) {
+    const nextCategories = categoryTree[department as keyof typeof categoryTree] ?? [];
+    const nextCategory = nextCategories[0];
+    const nextSubcategory = nextCategory?.subcategories[0] ?? '';
+
+    setForm((current) => ({
+      ...current,
+      department,
+      category: nextCategory?.value ?? '',
+      subcategory: nextSubcategory,
+    }));
+  }
+
+  function updateCategory(category: string) {
+    const nextCategory = selectedCategories.find((item) => item.value === category);
+    const nextSubcategory = nextCategory?.subcategories[0] ?? '';
+
+    setForm((current) => ({
+      ...current,
+      category,
+      subcategory: nextSubcategory,
+    }));
+  }
+
+  function applyCategorySearchResult(result: CategorySearchResult) {
+    setForm((current) => ({
+      ...current,
+      department: result.department,
+      category: result.category,
+      subcategory: result.subcategory,
+    }));
+    setCategorySearch('');
   }
 
   async function submitExpense(event: FormEvent<HTMLFormElement>) {
@@ -175,16 +234,17 @@ function ExpenseApp({ user }: { user: User }) {
 
       if (!response.ok) {
         const errorPayload = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(errorPayload?.error ?? 'Could not submit the expense.');
+        throw new Error(errorPayload?.error ?? 'Výdaj se nepodařilo odeslat.');
       }
 
       setStatus('success');
-      setMessage('Expense saved.');
+      setMessage('Výdaj byl uložen.');
       setForm(emptyForm);
       setReceipt(null);
+      setCategorySearch('');
     } catch (error) {
       setStatus('error');
-      setMessage(error instanceof Error ? error.message : 'Could not submit the expense.');
+      setMessage(error instanceof Error ? error.message : 'Výdaj se nepodařilo odeslat.');
     }
   }
 
@@ -198,7 +258,7 @@ function ExpenseApp({ user }: { user: User }) {
           </div>
           <div className="flex items-center gap-3">
             <span className="hidden max-w-56 truncate text-sm text-ink/70 sm:block">{formattedUser}</span>
-            <button className="icon-button" onClick={() => void signOut(auth)} type="button" title="Sign out">
+            <button className="icon-button" onClick={() => void signOut(auth)} type="button" title="Odhlásit se">
               <LogOutIcon />
             </button>
           </div>
@@ -206,34 +266,31 @@ function ExpenseApp({ user }: { user: User }) {
       </header>
 
       <section className="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:py-10">
-        <ReceiptPanel
-          receipt={receipt}
-          previewUrl={previewUrl}
-          onReceiptChange={setReceipt}
-        />
+        <ReceiptPanel receipt={receipt} previewUrl={previewUrl} onReceiptChange={setReceipt} />
 
         <form onSubmit={submitExpense} className="rounded-lg border border-line bg-white p-4 shadow-panel sm:p-6">
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-xl font-bold text-ink">Transaction</h2>
-              <p className="mt-1 text-sm text-ink/65">Required fields are receipt, date, merchant, and amount.</p>
+              <h2 className="text-xl font-bold text-ink">Transakce</h2>
+              <p className="mt-1 text-sm text-ink/65">
+                Povinné položky jsou účtenka, název, částka, kategorie a subkategorie.
+              </p>
             </div>
-            <span className="rounded-md bg-gold/15 px-2.5 py-1 text-sm font-bold text-[#7a4d00]">{form.currency}</span>
+            <span className="rounded-md bg-gold/15 px-2.5 py-1 text-sm font-bold text-[#7a4d00]">CZK</span>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Date" id="transactionDate">
+            <Field label="Název" id="name">
               <input
-                id="transactionDate"
+                id="name"
                 className="field"
-                type="date"
-                value={form.transactionDate}
-                onChange={(event) => updateField('transactionDate', event.target.value)}
+                value={form.name}
+                onChange={(event) => updateField('name', event.target.value)}
                 required
               />
             </Field>
 
-            <Field label="Amount" id="amount">
+            <Field label="Částka" id="amount">
               <input
                 id="amount"
                 className="field"
@@ -247,82 +304,122 @@ function ExpenseApp({ user }: { user: User }) {
               />
             </Field>
 
-            <Field label="Merchant" id="merchant">
-              <input
-                id="merchant"
-                className="field"
-                value={form.merchant}
-                onChange={(event) => updateField('merchant', event.target.value)}
-                required
-              />
-            </Field>
-
-            <Field label="Currency" id="currency">
-              <select
-                id="currency"
-                className="field"
-                value={form.currency}
-                onChange={(event) => updateField('currency', event.target.value)}
-              >
-                <option>EUR</option>
-                <option>CZK</option>
-                <option>USD</option>
-                <option>GBP</option>
-              </select>
-            </Field>
-
-            <Field label="Category" id="category">
-              <select
-                id="category"
-                className="field"
-                value={form.category}
-                onChange={(event) => updateField('category', event.target.value)}
-              >
-                {categories.map((category) => (
-                  <option key={category}>{category}</option>
-                ))}
-              </select>
-            </Field>
-
-            <Field label="Payment method" id="paymentMethod">
-              <select
-                id="paymentMethod"
-                className="field"
-                value={form.paymentMethod}
-                onChange={(event) => updateField('paymentMethod', event.target.value)}
-              >
-                {paymentMethods.map((method) => (
-                  <option key={method}>{method}</option>
-                ))}
-              </select>
-            </Field>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <Field label="Způsob platby" id="paymentMethod">
+                <select
+                  id="paymentMethod"
+                  className="field"
+                  value={form.paymentMethod}
+                  onChange={(event) => updateField('paymentMethod', event.target.value)}
+                >
+                  {paymentMethods.map((method) => (
+                    <option key={method.value} value={method.value}>
+                      {method.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
           </div>
 
-          <div className="mt-4 grid gap-4">
-            <Field label="Project or event" id="project">
-              <input
-                id="project"
-                className="field"
-                value={form.project}
-                onChange={(event) => updateField('project', event.target.value)}
-              />
-            </Field>
+          <div className="mt-5 rounded-lg border border-line bg-mist/70 p-4">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="text-base font-bold text-ink">Zařazení výdaje</h3>
+              <span className="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-ink/65">
+                {form.department} / {form.category} / {form.subcategory}
+              </span>
+            </div>
 
-            <Field label="Notes" id="notes">
-              <textarea
-                id="notes"
-                className="field min-h-28 resize-y"
-                value={form.notes}
-                onChange={(event) => updateField('notes', event.target.value)}
-              />
-            </Field>
+            <div className="grid gap-4">
+              <Field label="Vyhledat kategorii" id="categorySearch">
+                <div className="relative">
+                  <input
+                    id="categorySearch"
+                    className="field"
+                    value={categorySearch}
+                    onChange={(event) => setCategorySearch(event.target.value)}
+                    placeholder="Např. Prostory"
+                    type="search"
+                  />
+                  {categorySearch ? (
+                    <div className="absolute z-10 mt-2 w-full overflow-hidden rounded-md border border-line bg-white shadow-panel">
+                      {categorySearchResults.length > 0 ? (
+                        categorySearchResults.map((result) => (
+                          <button
+                            key={`${result.department}-${result.category}-${result.subcategory}`}
+                            className="block w-full px-3 py-3 text-left text-sm hover:bg-mist focus:bg-mist focus:outline-none"
+                            onClick={() => applyCategorySearchResult(result)}
+                            type="button"
+                          >
+                            <span className="block font-bold text-ink">{result.subcategory}</span>
+                            <span className="block text-ink/65">
+                              {result.departmentLabel} / {result.categoryLabel}
+                            </span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-3 text-sm font-semibold text-ink/55">Žádný výsledek</div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              </Field>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Field label="Oddělení" id="department">
+                  <select
+                    id="department"
+                    className="field"
+                    value={form.department}
+                    onChange={(event) => updateDepartment(event.target.value)}
+                  >
+                    {departments.map((department) => (
+                      <option key={department.value} value={department.value}>
+                        {department.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Kategorie" id="category">
+                  <select
+                    id="category"
+                    className="field"
+                    value={form.category}
+                    onChange={(event) => updateCategory(event.target.value)}
+                    required
+                  >
+                    {selectedCategories.map((category) => (
+                      <option key={category.value} value={category.value}>
+                        {category.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Subkategorie" id="subcategory">
+                  <select
+                    id="subcategory"
+                    className="field"
+                    value={form.subcategory}
+                    onChange={(event) => updateField('subcategory', event.target.value)}
+                    required
+                  >
+                    {selectedSubcategories.map((subcategory) => (
+                      <option key={subcategory} value={subcategory}>
+                        {subcategory}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+            </div>
           </div>
 
           {message ? (
             <p
-              className={`mt-5 rounded-md px-3 py-2 text-sm font-semibold ${
-                status === 'success' ? 'bg-brand/10 text-brand' : 'bg-coral/10 text-coral'
-              }`}
+              className={`mt-5 rounded-md px-3 py-2 text-sm font-semibold ${status === 'success' ? 'bg-brand/10 text-brand' : 'bg-coral/10 text-coral'
+                }`}
             >
               {message}
             </p>
@@ -333,7 +430,7 @@ function ExpenseApp({ user }: { user: User }) {
             disabled={!canSubmit || status === 'submitting'}
             type="submit"
           >
-            {status === 'submitting' ? 'Saving...' : 'Save expense'}
+            {status === 'submitting' ? 'Ukládám...' : 'Uložit výdaj'}
           </button>
         </form>
       </section>
@@ -353,14 +450,14 @@ function ReceiptPanel({
   return (
     <section className="rounded-lg border border-line bg-white p-4 shadow-panel sm:p-6">
       <div className="mb-5">
-        <h2 className="text-xl font-bold text-ink">Receipt</h2>
-        <p className="mt-1 text-sm text-ink/65">Take a photo on mobile or upload an existing image.</p>
+        <h2 className="text-xl font-bold text-ink">Účtenka</h2>
+        <p className="mt-1 text-sm text-ink/65">Vyfoťte účtenku na mobilu nebo nahrajte existující obrázek.</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-brand bg-brand px-4 py-3 font-bold text-white transition hover:bg-brand/90">
           <CameraIcon />
-          Take photo
+          Vyfotit
           <input
             className="sr-only"
             type="file"
@@ -372,7 +469,7 @@ function ReceiptPanel({
 
         <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-line bg-white px-4 py-3 font-bold text-ink transition hover:border-brand hover:text-brand">
           <UploadIcon />
-          Upload image
+          Nahrát obrázek
           <input
             className="sr-only"
             type="file"
@@ -384,9 +481,9 @@ function ReceiptPanel({
 
       <div className="mt-5 flex aspect-[4/5] min-h-80 items-center justify-center overflow-hidden rounded-md border border-dashed border-line bg-mist">
         {previewUrl ? (
-          <img className="h-full w-full object-contain" src={previewUrl} alt="Receipt preview" />
+          <img className="h-full w-full object-contain" src={previewUrl} alt="Náhled účtenky" />
         ) : (
-          <div className="px-6 text-center text-sm font-semibold text-ink/55">No receipt selected</div>
+          <div className="px-6 text-center text-sm font-semibold text-ink/55">Není vybraná žádná účtenka</div>
         )}
       </div>
 
@@ -398,7 +495,7 @@ function ReceiptPanel({
             onClick={() => onReceiptChange(null)}
             type="button"
           >
-            Remove
+            Odebrat
           </button>
         </div>
       ) : null}
@@ -415,6 +512,14 @@ function Field({ label, id, children }: { label: string; id: string; children: R
       {children}
     </div>
   );
+}
+
+function normalizeText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
 }
 
 function CameraIcon() {

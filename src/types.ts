@@ -1,12 +1,10 @@
 export type ExpenseForm = {
-  transactionDate: string;
-  merchant: string;
+  name: string;
   amount: string;
-  currency: string;
+  department: string;
   category: string;
+  subcategory: string;
   paymentMethod: string;
-  project: string;
-  notes: string;
 };
 
 export type SubmissionState = 'idle' | 'submitting' | 'success' | 'error';

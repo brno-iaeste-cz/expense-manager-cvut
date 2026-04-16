@@ -25,14 +25,12 @@ const firebaseKeys = createRemoteJWKSet(
 );
 
 const expenseSchema = z.object({
-  transactionDate: z.string().min(1),
-  merchant: z.string().min(1).max(160),
+  name: z.string().min(1).max(160),
   amount: z.coerce.number().positive(),
-  currency: z.string().min(3).max(3),
+  department: z.string().min(1).max(80),
   category: z.string().min(1).max(80),
+  subcategory: z.string().min(1).max(120),
   paymentMethod: z.string().min(1).max(80),
-  project: z.string().max(160).optional().default(''),
-  notes: z.string().max(1000).optional().default(''),
 });
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>().basePath('/api');
@@ -90,14 +88,12 @@ app.post('/expenses', async (c) => {
   }
 
   const parsedExpense = expenseSchema.safeParse({
-    transactionDate: body.transactionDate,
-    merchant: body.merchant,
+    name: body.name,
     amount: body.amount,
-    currency: body.currency,
+    department: body.department,
     category: body.category,
+    subcategory: body.subcategory,
     paymentMethod: body.paymentMethod,
-    project: body.project,
-    notes: body.notes,
   });
 
   if (!parsedExpense.success) {
