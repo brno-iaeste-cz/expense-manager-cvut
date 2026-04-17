@@ -503,15 +503,16 @@ function ExpenseApp({ user }: { user: User }) {
   }
 
   return (
-    <main className="min-h-screen bg-[#f5f7f8]">
+    <main className="min-h-screen overflow-x-hidden bg-[#f5f7f8]">
       <header className="border-b border-line bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-3 py-3 sm:px-6 sm:py-4">
           <div className="min-w-0">
-            <p className="text-sm font-bold uppercase tracking-wide text-brand">IAESTE LC Brno</p>
-            <h1 className="text-xl font-bold text-ink sm:text-2xl">Expense manager</h1>
+            <p className="text-xs font-bold uppercase tracking-wide text-brand sm:text-sm">IAESTE LC Brno</p>
+            <h1 className="truncate text-2xl font-bold text-ink">Expense manager</h1>
+            <p className="mt-0.5 truncate text-sm text-ink/70 sm:hidden">{formattedUser}</p>
           </div>
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="max-w-36 truncate text-sm text-ink/70 sm:max-w-56">{formattedUser}</span>
+          <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
+            <span className="hidden max-w-56 truncate text-sm text-ink/70 sm:block">{formattedUser}</span>
             <button className="icon-button" onClick={() => void signOut(auth)} type="button" title="Odhlásit se">
               <LogOutIcon />
             </button>
@@ -519,8 +520,9 @@ function ExpenseApp({ user }: { user: User }) {
         </div>
       </header>
 
-      <form onSubmit={submitExpense} className="mx-auto grid max-w-3xl gap-6 px-4 py-6 sm:px-6 lg:py-10">
-        <section className="rounded-lg border border-line bg-white p-4 shadow-panel sm:p-6">
+      <form onSubmit={submitExpense} className="mx-auto grid max-w-6xl gap-4 px-3 py-4 sm:gap-6 sm:px-6 sm:py-6 lg:py-10">
+        <div className="grid min-w-0 gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,0.85fr)]">
+          <section className="min-w-0 rounded-lg border border-line bg-white p-3 shadow-panel sm:p-6">
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
               <h2 className="text-xl font-bold text-ink">Výdaj</h2>
@@ -528,15 +530,18 @@ function ExpenseApp({ user }: { user: User }) {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Název" id="name">
+            <div className="sm:col-span-2">
+              <Field label="Název" id="name">
               <input
                 id="name"
                 className="field"
+                placeholder="Např. Catering"
                 value={form.name}
                 onChange={(event) => updateField('name', event.target.value)}
                 required
               />
-            </Field>
+              </Field>
+            </div>
 
             <Field label="Částka" id="amount">
               <div className="relative">
@@ -557,8 +562,7 @@ function ExpenseApp({ user }: { user: User }) {
               </div>
             </Field>
 
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <Field label="Způsob platby" id="paymentMethod">
+            <Field label="Způsob platby" id="paymentMethod">
                 <select
                   id="paymentMethod"
                   className="field"
@@ -571,14 +575,13 @@ function ExpenseApp({ user }: { user: User }) {
                     </option>
                   ))}
                 </select>
-              </Field>
-            </div>
+            </Field>
           </div>
 
-          <div className="mt-5 rounded-lg border border-line bg-mist/70 p-4">
-            <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="mt-5 rounded-lg border border-line bg-mist/70 p-3 sm:p-4">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
               <h3 className="text-base font-bold text-ink">Zařazení výdaje</h3>
-              <span className="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-ink/65">
+              <span className="max-w-full break-words rounded-md bg-white px-2.5 py-1 text-xs font-bold text-ink/65 sm:text-right">
                 {form.department} / {form.category} / {form.subcategory}
               </span>
             </div>
@@ -669,9 +672,10 @@ function ExpenseApp({ user }: { user: User }) {
             </div>
           </div>
 
-        </section>
+          </section>
 
-        <ReceiptPanel receipt={receipt} previewUrl={previewUrl} onReceiptChange={setReceipt} />
+          <ReceiptPanel receipt={receipt} previewUrl={previewUrl} onReceiptChange={setReceipt} />
+        </div>
 
         {message ? (
           <p
@@ -682,21 +686,23 @@ function ExpenseApp({ user }: { user: User }) {
           </p>
         ) : null}
 
-        <button
-          className="w-full rounded-md bg-brand px-4 py-3 font-bold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={!canSubmit || status === 'submitting'}
-          type="submit"
-        >
-          {status === 'submitting' ? 'Ukládám...' : 'Uložit výdaj'}
-        </button>
-        <a
-          className="block w-full rounded-md border border-line bg-white px-4 py-3 text-center font-bold text-ink transition hover:border-brand hover:text-brand focus:outline-none focus:ring-4 focus:ring-brand/15"
-          href={categoriesSpreadsheetUrl}
-          rel="noreferrer"
-          target="_blank"
-        >
-          Otevřít tabulku výdajů
-        </a>
+        <div className="grid gap-3 sm:ml-auto sm:w-auto sm:grid-cols-2">
+          <a
+            className="order-2 block w-full rounded-md border border-line bg-white px-4 py-2.5 text-center font-bold text-ink transition hover:border-brand hover:text-brand focus:outline-none focus:ring-4 focus:ring-brand/15 sm:order-1 sm:w-56"
+            href={categoriesSpreadsheetUrl}
+            rel="noreferrer"
+            target="_blank"
+          >
+            Otevřít tabulku výdajů
+          </a>
+          <button
+            className="order-1 w-full rounded-md bg-brand px-4 py-2.5 font-bold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60 sm:order-2 sm:w-56"
+            disabled={!canSubmit || status === 'submitting'}
+            type="submit"
+          >
+            {status === 'submitting' ? 'Ukládám...' : 'Uložit výdaj'}
+          </button>
+        </div>
       </form>
     </main>
   );
@@ -712,14 +718,14 @@ function ReceiptPanel({
   onReceiptChange: (file: File | null) => void;
 }) {
   return (
-    <section className="rounded-lg border border-line bg-white p-4 shadow-panel sm:p-6">
+    <section className="flex min-w-0 flex-col rounded-lg border border-line bg-white p-3 shadow-panel sm:p-6">
       <div className="mb-5">
         <h2 className="text-xl font-bold text-ink">Účtenka</h2>
         <p className="mt-1 text-sm text-ink/65">Vyfoťte účtenku na mobilu nebo nahrajte existující obrázek.</p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-brand bg-brand px-4 py-3 font-bold text-white transition hover:bg-brand/90">
+      <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+        <label className="flex min-w-0 cursor-pointer items-center justify-center gap-2 rounded-md border border-brand bg-brand px-3 py-3 font-bold text-white transition hover:bg-brand/90 sm:px-4">
           <CameraIcon />
           Vyfotit
           <input
@@ -731,7 +737,7 @@ function ReceiptPanel({
           />
         </label>
 
-        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-line bg-white px-4 py-3 font-bold text-ink transition hover:border-brand hover:text-brand">
+        <label className="flex min-w-0 cursor-pointer items-center justify-center gap-2 rounded-md border border-line bg-white px-3 py-3 font-bold text-ink transition hover:border-brand hover:text-brand sm:px-4">
           <UploadIcon />
           Nahrát obrázek
           <input
@@ -743,7 +749,7 @@ function ReceiptPanel({
         </label>
       </div>
 
-      <div className="mt-5 flex aspect-[7/5] min-h-80 items-center justify-center overflow-hidden rounded-md border border-dashed border-line bg-mist">
+      <div className="mt-5 flex aspect-[7/5] min-h-56 items-center justify-center overflow-hidden rounded-md border border-dashed border-line bg-mist sm:min-h-80 lg:flex-1 lg:aspect-auto">
         {previewUrl ? (
           <img className="h-full w-full object-contain" src={previewUrl} alt="Náhled účtenky" />
         ) : (
@@ -769,7 +775,7 @@ function ReceiptPanel({
 
 function Field({ label, id, children }: { label: string; id: string; children: React.ReactNode }) {
   return (
-    <div>
+    <div className="min-w-0">
       <label className="label" htmlFor={id}>
         {label}
       </label>

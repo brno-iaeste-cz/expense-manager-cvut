@@ -27,7 +27,7 @@ textarea {
 }
 
 .field {
-  @apply w-full rounded-md border border-line bg-white px-3 py-3 text-base text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/15;
+  @apply block min-w-0 w-full rounded-md border border-line bg-white px-3 py-3 text-base text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/15;
 }
 
 .label {
@@ -35,5 +35,5 @@ textarea {
 }
 
 .icon-button {
-  @apply inline-flex h-11 w-11 items-center justify-center rounded-md border border-line bg-white text-ink transition hover:border-brand hover:text-brand focus:outline-none focus:ring-4 focus:ring-brand/15;
+  @apply inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-line bg-white text-ink transition hover:border-brand hover:text-brand focus:outline-none focus:ring-4 focus:ring-brand/15 sm:h-11 sm:w-11;
 }
