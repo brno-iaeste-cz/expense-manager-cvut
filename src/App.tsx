@@ -37,6 +37,13 @@ const paymentMethods = [
   { value: 'No document', label: 'Bez dokladu' },
 ];
 
+const fieldHints = {
+  paymentMethod:
+    'Vyberte, jak byl výdaj zaplacen. Soukromá platba znamená, že jste výdaj uhradili ze svých peněz.',
+  categorySearch:
+    'Začněte psát název oddělení, kategorie nebo subkategorie a vyberte odpovídající položku ze seznamu.',
+};
+
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -562,7 +569,11 @@ function ExpenseApp({ user }: { user: User }) {
               </div>
             </Field>
 
-            <Field label="Způsob platby" id="paymentMethod">
+            <Field
+              label="Způsob platby"
+              id="paymentMethod"
+              hint={fieldHints.paymentMethod}
+            >
                 <select
                   id="paymentMethod"
                   className="field"
@@ -587,7 +598,11 @@ function ExpenseApp({ user }: { user: User }) {
             </div>
 
             <div className="grid gap-4">
-              <Field label="Vyhledat kategorii" id="categorySearch">
+              <Field
+                label="Vyhledat kategorii"
+                id="categorySearch"
+                hint={fieldHints.categorySearch}
+              >
                 <div className="relative">
                   <input
                     id="categorySearch"
@@ -773,12 +788,45 @@ function ReceiptPanel({
   );
 }
 
-function Field({ label, id, children }: { label: string; id: string; children: React.ReactNode }) {
+function Field({
+  label,
+  id,
+  hint,
+  children,
+}: {
+  label: string;
+  id: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  const hintId = `${id}-hint`;
+
   return (
     <div className="min-w-0">
-      <label className="label" htmlFor={id}>
-        {label}
-      </label>
+      <div className="mb-1.5 flex min-w-0 items-center gap-2">
+        <label className="block text-sm font-semibold text-ink" htmlFor={id}>
+          {label}
+        </label>
+        {hint ? (
+          <span className="group relative inline-flex">
+            <button
+              aria-describedby={hintId}
+              aria-label={`Nápověda: ${label}`}
+              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-line bg-white text-xs font-bold leading-none text-ink/65 transition hover:border-brand hover:text-brand focus:outline-none focus:ring-4 focus:ring-brand/15"
+              type="button"
+            >
+              ?
+            </button>
+            <span
+              className="pointer-events-none absolute left-1/2 top-7 z-20 hidden w-64 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-md border border-line bg-white px-3 py-2 text-sm font-medium leading-5 text-ink shadow-panel group-hover:block group-focus-within:block sm:left-0 sm:translate-x-0"
+              id={hintId}
+              role="tooltip"
+            >
+              {hint}
+            </span>
+          </span>
+        ) : null}
+      </div>
       {children}
     </div>
   );
