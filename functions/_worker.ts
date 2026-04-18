@@ -30,6 +30,7 @@ const allowedEmailDomain = 'iaeste.cz';
 
 const expenseSchema = z.object({
   name: z.string().min(1).max(160),
+  expenseDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   amount: z.coerce.number().positive(),
   department: z.string().min(1).max(80),
   category: z.string().min(1).max(80),
@@ -110,12 +111,9 @@ app.post('/expenses', async (c) => {
 
   const receipt = body.get('receipt');
 
-  if (!isUploadedFile(receipt)) {
-    throw new HTTPException(400, { message: 'Receipt image is required.' });
-  }
-
   const parsedExpense = expenseSchema.safeParse({
     name: getFormValue(body, 'name'),
+    expenseDate: getFormValue(body, 'expenseDate'),
     amount: getFormValue(body, 'amount'),
     department: getFormValue(body, 'department'),
     category: getFormValue(body, 'category'),
@@ -127,19 +125,25 @@ app.post('/expenses', async (c) => {
     throw new HTTPException(400, { message: 'Expense details are invalid.' });
   }
 
+  if (parsedExpense.data.paymentMethod !== 'No document' && !isUploadedFile(receipt)) {
+    throw new HTTPException(400, { message: 'Receipt image is required.' });
+  }
+
   const user = c.get('user');
-  const imageBase64 = arrayBufferToBase64(await receipt.arrayBuffer());
+  const receiptPayload = isUploadedFile(receipt)
+    ? {
+        filename: receipt.name,
+        mimeType: receipt.type || 'image/jpeg',
+        base64: arrayBufferToBase64(await receipt.arrayBuffer()),
+      }
+    : null;
 
   const appsScriptPayload = await submitToAppsScript(c.env, {
     secret: c.env.APPS_SCRIPT_SECRET,
     submittedAt: new Date().toISOString(),
     user,
     expense: parsedExpense.data,
-    receipt: {
-      filename: receipt.name,
-      mimeType: receipt.type || 'image/jpeg',
-      base64: imageBase64,
-    },
+    receipt: receiptPayload,
   });
 
   return c.json({

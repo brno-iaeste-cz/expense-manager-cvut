@@ -18,7 +18,7 @@ function doPost(e) {
     const receipt = payload.receipt;
     const user = payload.user || {};
 
-    if (!expense || !receipt || !receipt.base64) {
+    if (!expense || (expense.paymentMethod !== 'No document' && (!receipt || !receipt.base64))) {
       return jsonResponse({ ok: false, error: 'Invalid request.' }, 400);
     }
 
@@ -30,20 +30,24 @@ function doPost(e) {
     const budgetTarget = findBudgetWriteTarget(expense);
 
     const folder = DriveApp.getFolderById(CONFIG.driveFolderId);
-    const filename = buildReceiptFilename(expense.name, receipt.filename);
-    const bytes = Utilities.base64Decode(receipt.base64);
-    const blob = Utilities.newBlob(bytes, receipt.mimeType || 'image/jpeg', filename);
-    const file = folder.createFile(blob);
+    let file = null;
+    if (receipt && receipt.base64) {
+      const filename = buildReceiptFilename(expense, user, receipt.filename);
+      const bytes = Utilities.base64Decode(receipt.base64);
+      const blob = Utilities.newBlob(bytes, receipt.mimeType || 'image/jpeg', filename);
+      file = folder.createFile(blob);
+    }
 
     sheet.appendRow([
       payload.submittedAt || new Date().toISOString(),
+      expense.expenseDate || '',
       expense.name,
       expense.amount,
       expense.department,
       expense.category,
       expense.subcategory,
       expense.paymentMethod,
-      file.getUrl(),
+      file ? file.getUrl() : '',
       user.name || '',
       user.email || '',
       user.uid || '',
@@ -53,8 +57,8 @@ function doPost(e) {
 
     return jsonResponse({
       ok: true,
-      receiptFileId: file.getId(),
-      receiptUrl: file.getUrl(),
+      receiptFileId: file ? file.getId() : '',
+      receiptUrl: file ? file.getUrl() : '',
     });
   } catch (error) {
     return jsonResponse({ ok: false, error: String(error) }, 500);
@@ -189,18 +193,56 @@ function jsonResponse(payload) {
   return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON);
 }
 
-function buildReceiptFilename(name, originalName) {
+function buildReceiptFilename(expense, user, originalName) {
   const extension = getExtension(originalName);
-  const namePart = String(name || 'expense')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '')
-    .slice(0, 60);
+  const datePart = formatExpenseDateForFilename(expense.expenseDate);
+  const namePart = sanitizeFilenamePart(expense.name, 'expense', 60);
+  const amountPart = sanitizeAmountForFilename(expense.amount);
+  const surnamePart = sanitizeFilenamePart(getUserSurname(user), 'unknown', 40);
 
-  return `${namePart}-${Utilities.getUuid()}${extension}`;
+  return `${datePart}_${namePart}_${amountPart}_${surnamePart}${extension}`;
 }
 
 function getExtension(filename) {
   const match = String(filename || '').match(/\.[a-zA-Z0-9]+$/);
   return match ? match[0].toLowerCase() : '.jpg';
+}
+
+function formatExpenseDateForFilename(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) {
+    return `${match[1]}${match[2]}${match[3]}`;
+  }
+
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd');
+}
+
+function sanitizeFilenamePart(value, fallback, maxLength) {
+  const normalized = String(value || fallback)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, maxLength);
+
+  return normalized || fallback;
+}
+
+function sanitizeAmountForFilename(value) {
+  const amount = Number(value);
+  if (Number.isFinite(amount)) {
+    return amount.toFixed(2).replace('.', '_');
+  }
+
+  return sanitizeFilenamePart(value, '0', 20);
+}
+
+function getUserSurname(user) {
+  const nameParts = String(user.name || '').trim().split(/\s+/).filter(Boolean);
+  if (nameParts.length > 0) {
+    return nameParts[nameParts.length - 1];
+  }
+
+  return String(user.email || '').split('@')[0] || 'unknown';
 }

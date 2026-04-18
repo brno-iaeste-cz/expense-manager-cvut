@@ -14,15 +14,9 @@ import { categorySearchIndex, categoryTree, departments } from './categories';
 import type { CategorySearchResult } from './categories';
 
 const allowedEmailDomain = 'iaeste.cz';
+const logoSrc = '/iaeste-lc-brno-logo.png';
 
-const emptyForm: ExpenseForm = {
-  name: '',
-  amount: '',
-  department: '',
-  category: '',
-  subcategory: '',
-  paymentMethod: 'Invoice',
-};
+const emptyForm = createEmptyForm();
 
 const categoriesSpreadsheetId =
   import.meta.env.EXPENSES_SPREADSHEET_ID ?? '1dMACC3Gyeor0Xv-mh0sN1y7sDOepLLiNeljMUqwdjWE';
@@ -139,11 +133,11 @@ function GoogleAuthScreen() {
     <main className="min-h-screen bg-mist px-4 py-8 sm:px-6">
       <section className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md items-center">
         <div className="w-full rounded-lg border border-line bg-white p-5 shadow-panel sm:p-7">
-          <div className="mb-7">
-            <p className="text-sm font-bold uppercase tracking-wide text-brand">IAESTE LC Brno</p>
+          <div className="mb-7 text-center">
+            <img className="mx-auto h-auto w-full max-w-72 object-contain" src={logoSrc} alt="IAESTE LC Brno" />
             <h1 className="mt-2 text-3xl font-bold text-ink">Expense manager</h1>
             <p className="mt-3 text-sm leading-6 text-ink/70">
-              Přihlaste se firemním Google účtem s doménou @{allowedEmailDomain}.
+              Přihlaste se Google účtem s doménou @{allowedEmailDomain}.
             </p>
           </div>
 
@@ -260,6 +254,7 @@ function ExpenseApp({ user }: { user: User }) {
       )
       .slice(0, 6);
   }, [categorySearch]);
+  const needsReceipt = form.paymentMethod !== 'No document';
 
   useEffect(() => {
     if (!receipt) {
@@ -274,13 +269,14 @@ function ExpenseApp({ user }: { user: User }) {
 
   const canSubmit = useMemo(() => {
     return Boolean(
-      receipt &&
+      (!needsReceipt || receipt) &&
       form.name.trim() &&
+      form.expenseDate.trim() &&
       form.category.trim() &&
       form.subcategory.trim() &&
         parseAmount(form.amount) > 0,
     );
-  }, [form, receipt]);
+  }, [form, needsReceipt, receipt]);
 
   function updateField<Key extends keyof ExpenseForm>(key: Key, value: ExpenseForm[Key]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -336,16 +332,23 @@ function ExpenseApp({ user }: { user: User }) {
 
   async function submitExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!receipt || !canSubmit) return;
+    if (!canSubmit) return;
 
     setStatus('submitting');
     setMessage('');
 
     const payload = new FormData();
     Object.entries(form).forEach(([key, value]) => {
-      payload.append(key, key === 'amount' ? value.replace(',', '.') : value);
+      if (key === 'amount') {
+        payload.append(key, value.replace(',', '.'));
+        return;
+      }
+
+      payload.append(key, value);
     });
-    payload.append('receipt', receipt);
+    if (receipt) {
+      payload.append('receipt', receipt);
+    }
 
     try {
       const token = await user.getIdToken();
@@ -364,7 +367,7 @@ function ExpenseApp({ user }: { user: User }) {
 
       setStatus('success');
       setMessage('Výdaj byl uložen.');
-      setForm(emptyForm);
+      setForm(createEmptyForm());
       setReceipt(null);
       setCategorySearch('');
     } catch (error) {
@@ -376,19 +379,21 @@ function ExpenseApp({ user }: { user: User }) {
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#f5f7f8]">
       <header className="border-b border-line bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-3 py-3 sm:px-6 sm:py-4">
-          <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-wide text-brand sm:text-sm">IAESTE LC Brno</p>
-            <h1 className="truncate text-2xl font-bold text-ink">Expense manager</h1>
-            <p className="mt-0.5 truncate text-sm text-ink/70 sm:hidden">{formattedUser}</p>
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-3 py-3 sm:gap-3 sm:px-6 sm:py-4">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <img className="h-auto min-w-14 flex-1 object-contain sm:w-40 sm:flex-none" src={logoSrc} alt="IAESTE LC Brno" />
+            <div className="w-[10.8rem] shrink-0 sm:w-[13.8rem]">
+              <h1 className="whitespace-nowrap text-[1.32rem] font-bold leading-tight text-ink sm:text-[1.7rem]">Expense manager</h1>
+              <p className="mt-0.5 truncate text-sm text-ink/70 sm:hidden">{formattedUser}</p>
+            </div>
           </div>
           <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
-            <span className="hidden max-w-56 truncate text-sm text-ink/70 sm:block">{formattedUser}</span>
-            <button className="icon-button" onClick={() => void signOut(auth)} type="button" title="Odhlásit se">
-              <LogOutIcon />
-            </button>
+              <span className="hidden max-w-56 truncate text-sm text-ink/70 sm:block">{formattedUser}</span>
+              <button className="icon-button" onClick={() => void signOut(auth)} type="button" title="Odhlásit se">
+                <LogOutIcon />
+              </button>
+            </div>
           </div>
-        </div>
       </header>
 
       <form onSubmit={submitExpense} className="mx-auto grid max-w-6xl gap-4 px-3 py-4 sm:gap-6 sm:px-6 sm:py-6 lg:py-10">
@@ -401,7 +406,7 @@ function ExpenseApp({ user }: { user: User }) {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">
+            <div>
               <Field label="Název" id="name">
               <input
                 id="name"
@@ -413,6 +418,17 @@ function ExpenseApp({ user }: { user: User }) {
               />
               </Field>
             </div>
+
+            <Field label="Datum uskutečnění výdaje" id="expenseDate">
+              <input
+                id="expenseDate"
+                className="field"
+                type="date"
+                value={form.expenseDate}
+                onChange={(event) => updateField('expenseDate', event.target.value)}
+                required
+              />
+            </Field>
 
             <Field label="Částka" id="amount">
               <div className="relative">
@@ -619,8 +635,8 @@ function ReceiptPanel({
   return (
     <section className="flex min-w-0 flex-col rounded-lg border border-line bg-white p-3 shadow-panel sm:p-6">
       <div className="mb-5">
-        <h2 className="text-xl font-bold text-ink">Účtenka</h2>
-        <p className="mt-1 text-sm text-ink/65">Vyfoťte účtenku na mobilu nebo nahrajte existující obrázek.</p>
+        <h2 className="text-xl font-bold text-ink">Doklad</h2>
+        <p className="mt-1 text-sm text-ink/65">Vyfoťte doklad na mobilu nebo nahrajte existující obrázek.</p>
       </div>
 
       <div className="grid min-w-0 gap-3 sm:grid-cols-2">
@@ -726,6 +742,22 @@ function normalizeText(value: string) {
 
 function parseAmount(value: string) {
   return Number(value.replace(',', '.'));
+}
+
+function createEmptyForm(): ExpenseForm {
+  return {
+    name: '',
+    expenseDate: getTodayDateInputValue(),
+    amount: '',
+    department: '',
+    category: '',
+    subcategory: '',
+    paymentMethod: 'Invoice',
+  };
+}
+
+function getTodayDateInputValue() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function isAllowedWorkspaceEmail(email: string | null) {
