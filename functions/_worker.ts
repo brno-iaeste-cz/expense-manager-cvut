@@ -26,6 +26,8 @@ const firebaseKeys = createRemoteJWKSet(
   new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'),
 );
 
+const allowedEmailDomain = 'iaeste.cz';
+
 const expenseSchema = z.object({
   name: z.string().min(1).max(160),
   amount: z.coerce.number().positive(),
@@ -75,9 +77,14 @@ app.use('/expenses', async (c, next) => {
       throw new HTTPException(403, { message: 'Email address is not verified.' });
     }
 
+    const email = typeof payload.email === 'string' ? payload.email : '';
+    if (!isAllowedWorkspaceEmail(email)) {
+      throw new HTTPException(403, { message: `Email address must use the ${allowedEmailDomain} domain.` });
+    }
+
     c.set('user', {
       uid: payload.sub ?? '',
-      email: typeof payload.email === 'string' ? payload.email : '',
+      email,
       name: typeof payload.name === 'string' ? payload.name : '',
       emailVerified,
     });
@@ -216,6 +223,10 @@ function getConfigPresence(env: Env) {
 function getFormValue(body: FormData, key: string) {
   const value = body.get(key);
   return typeof value === 'string' ? value : '';
+}
+
+function isAllowedWorkspaceEmail(email: string) {
+  return email.toLowerCase().endsWith(`@${allowedEmailDomain}`);
 }
 
 function isUploadedFile(value: FormDataEntryValue | null): value is File {

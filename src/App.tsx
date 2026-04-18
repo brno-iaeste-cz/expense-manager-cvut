@@ -2,19 +2,18 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   User,
   browserLocalPersistence,
-  createUserWithEmailAndPassword,
+  GoogleAuthProvider,
   onAuthStateChanged,
-  reload,
-  sendEmailVerification,
   setPersistence,
-  signInWithEmailAndPassword,
+  signInWithPopup,
   signOut,
-  updateProfile,
 } from 'firebase/auth';
 import { auth } from './firebase';
 import { ExpenseForm, SubmissionState } from './types';
 import { categorySearchIndex, categoryTree, departments } from './categories';
 import type { CategorySearchResult } from './categories';
+
+const allowedEmailDomain = 'iaeste.cz';
 
 const emptyForm: ExpenseForm = {
   name: '',
@@ -85,8 +84,12 @@ function App() {
     return <AuthScreen />;
   }
 
+  if (!isAllowedWorkspaceEmail(user.email)) {
+    return <AccessDenied user={user} />;
+  }
+
   if (!user.emailVerified) {
-    return <VerifyEmail user={user} onVerified={() => refreshAuthView((current) => current + 1)} />;
+    return <UnverifiedAccount user={user} onRefresh={() => refreshAuthView((current) => current + 1)} />;
   }
 
   return <ExpenseApp user={user} />;
@@ -101,248 +104,34 @@ function LoadingScreen() {
 }
 
 function AuthScreen() {
-  const [mode, setMode] = useState<'signIn' | 'register'>('signIn');
-
-  return mode === 'signIn' ? (
-    <SignIn onShowRegister={() => setMode('register')} />
-  ) : (
-    <Register onShowSignIn={() => setMode('signIn')} />
-  );
+  return <GoogleAuthScreen />;
 }
 
-function SignIn({ onShowRegister }: { onShowRegister: () => void }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+function GoogleAuthScreen() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleGoogleSignIn() {
     setBusy(true);
     setError('');
 
     try {
-      await signInWithEmailAndPassword(auth, email.trim(), password);
-    } catch {
-      setError('E-mail nebo heslo není správné.');
-    } finally {
-      setBusy(false);
-    }
-  }
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({
+        hd: allowedEmailDomain,
+        prompt: 'select_account',
+      });
 
-  return (
-    <main className="min-h-screen bg-mist px-4 py-8 sm:px-6">
-      <section className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md items-center">
-        <form
-          onSubmit={handleSubmit}
-          className="w-full rounded-lg border border-line bg-white p-5 shadow-panel sm:p-7"
-        >
-          <div className="mb-7">
-            <p className="text-sm font-bold uppercase tracking-wide text-brand">IAESTE LC Brno</p>
-            <h1 className="mt-2 text-3xl font-bold text-ink">Expense manager</h1>
-          </div>
+      const credential = await signInWithPopup(auth, provider);
 
-          <label className="label" htmlFor="email">
-            E-mail
-          </label>
-          <input
-            id="email"
-            className="field mb-4"
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-          />
-
-          <label className="label" htmlFor="password">
-            Heslo
-          </label>
-          <input
-            id="password"
-            className="field"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-          />
-
-          {error ? <p className="mt-4 rounded-md bg-coral/10 px-3 py-2 text-sm text-coral">{error}</p> : null}
-
-          <button
-            className="mt-6 w-full rounded-md bg-brand px-4 py-3 font-bold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={busy}
-            type="submit"
-          >
-            {busy ? 'Přihlašuji...' : 'Přihlásit se'}
-          </button>
-
-          <button
-            className="mt-3 w-full rounded-md border border-line bg-white px-4 py-3 font-bold text-ink transition hover:border-brand hover:text-brand"
-            onClick={onShowRegister}
-            type="button"
-          >
-            Vytvořit účet
-          </button>
-        </form>
-      </section>
-    </main>
-  );
-}
-
-function Register({ onShowSignIn }: { onShowSignIn: () => void }) {
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    setError('');
-
-    const normalizedName = fullName.trim();
-    const normalizedEmail = email.trim().toLowerCase();
-
-    if (!normalizedName) {
-      setError('Zadejte celé jméno.');
-      setBusy(false);
-      return;
-    }
-
-    if (!normalizedEmail.endsWith('@iaeste.cz')) {
-      setError('Registrace je povolena pouze pro e-mail s doménou iaeste.cz.');
-      setBusy(false);
-      return;
-    }
-
-    try {
-      const credential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
-      await updateProfile(credential.user, { displayName: normalizedName });
-      await sendEmailVerification(credential.user);
-      await credential.user.getIdToken(true);
-    } catch (error) {
-      setError(getRegistrationErrorMessage(error));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <main className="min-h-screen bg-mist px-4 py-8 sm:px-6">
-      <section className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md items-center">
-        <form
-          onSubmit={handleSubmit}
-          className="w-full rounded-lg border border-line bg-white p-5 shadow-panel sm:p-7"
-        >
-          <div className="mb-7">
-            <p className="text-sm font-bold uppercase tracking-wide text-brand">IAESTE LC Brno</p>
-            <h1 className="mt-2 text-3xl font-bold text-ink">Registrace</h1>
-          </div>
-
-          <label className="label" htmlFor="fullName">
-            Celé jméno
-          </label>
-          <input
-            id="fullName"
-            className="field mb-4"
-            autoComplete="name"
-            value={fullName}
-            onChange={(event) => setFullName(event.target.value)}
-            required
-          />
-
-          <label className="label" htmlFor="registerEmail">
-            E-mail
-          </label>
-          <input
-            id="registerEmail"
-            className="field mb-4"
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-          />
-
-          <label className="label" htmlFor="registerPassword">
-            Heslo
-          </label>
-          <input
-            id="registerPassword"
-            className="field"
-            type="password"
-            autoComplete="new-password"
-            minLength={6}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-          />
-
-          {error ? <p className="mt-4 rounded-md bg-coral/10 px-3 py-2 text-sm text-coral">{error}</p> : null}
-
-          <button
-            className="mt-6 w-full rounded-md bg-brand px-4 py-3 font-bold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={busy}
-            type="submit"
-          >
-            {busy ? 'Vytvářím účet...' : 'Registrovat se'}
-          </button>
-
-          <button
-            className="mt-3 w-full rounded-md border border-line bg-white px-4 py-3 font-bold text-ink transition hover:border-brand hover:text-brand"
-            onClick={onShowSignIn}
-            type="button"
-          >
-            Zpět na přihlášení
-          </button>
-        </form>
-      </section>
-    </main>
-  );
-}
-
-function VerifyEmail({ user, onVerified }: { user: User; onVerified: () => void }) {
-  const [message, setMessage] = useState('Ověřovací e-mail byl odeslán.');
-  const [error, setError] = useState('');
-  const [busyAction, setBusyAction] = useState<'check' | 'send' | ''>('');
-
-  async function checkVerification() {
-    setBusyAction('check');
-    setError('');
-    setMessage('');
-
-    try {
-      await reload(user);
-      await user.getIdToken(true);
-
-      if (auth.currentUser?.emailVerified || user.emailVerified) {
-        onVerified();
-        return;
+      if (!isAllowedWorkspaceEmail(credential.user.email)) {
+        await signOut(auth);
+        setError('Přihlášení je povoleno pouze pro Google Workspace účty s doménou iaeste.cz.');
       }
-
-      setError('E-mail zatím není ověřený.');
-    } catch {
-      setError('Ověření se nepodařilo zkontrolovat.');
+    } catch (error) {
+      setError(getGoogleSignInErrorMessage(error));
     } finally {
-      setBusyAction('');
-    }
-  }
-
-  async function resendVerification() {
-    setBusyAction('send');
-    setError('');
-    setMessage('');
-
-    try {
-      await sendEmailVerification(user);
-      setMessage('Ověřovací e-mail byl znovu odeslán.');
-    } catch {
-      setError('Ověřovací e-mail se nepodařilo odeslat.');
-    } finally {
-      setBusyAction('');
+      setBusy(false);
     }
   }
 
@@ -352,33 +141,83 @@ function VerifyEmail({ user, onVerified }: { user: User; onVerified: () => void 
         <div className="w-full rounded-lg border border-line bg-white p-5 shadow-panel sm:p-7">
           <div className="mb-7">
             <p className="text-sm font-bold uppercase tracking-wide text-brand">IAESTE LC Brno</p>
-            <h1 className="mt-2 text-3xl font-bold text-ink">Ověření e-mailu</h1>
+            <h1 className="mt-2 text-3xl font-bold text-ink">Expense manager</h1>
+            <p className="mt-3 text-sm leading-6 text-ink/70">
+              Přihlaste se firemním Google účtem s doménou @{allowedEmailDomain}.
+            </p>
           </div>
 
-          <p className="text-sm leading-6 text-ink/70">
-            Pro pokračování ověřte e-mailovou adresu <strong className="text-ink">{user.email}</strong>. Po kliknutí
-            na odkaz v e-mailu se vraťte sem a zkontrolujte ověření.
-          </p>
-
-          {message ? <p className="mt-4 rounded-md bg-green-100 px-3 py-2 text-sm text-green-800">{message}</p> : null}
           {error ? <p className="mt-4 rounded-md bg-coral/10 px-3 py-2 text-sm text-coral">{error}</p> : null}
 
           <button
-            className="mt-6 w-full rounded-md bg-brand px-4 py-3 font-bold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={Boolean(busyAction)}
-            onClick={() => void checkVerification()}
+            className="mt-6 flex w-full items-center justify-center gap-3 rounded-md border border-line bg-white px-4 py-3 font-bold text-ink transition hover:border-brand hover:text-brand disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={busy}
+            onClick={() => void handleGoogleSignIn()}
             type="button"
           >
-            {busyAction === 'check' ? 'Kontroluji...' : 'Zkontrolovat ověření'}
+            <GoogleIcon />
+            {busy ? 'Přihlašuji...' : 'Přihlásit se přes Google'}
           </button>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function AccessDenied({ user }: { user: User }) {
+  return (
+    <main className="min-h-screen bg-mist px-4 py-8 sm:px-6">
+      <section className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md items-center">
+        <div className="w-full rounded-lg border border-line bg-white p-5 shadow-panel sm:p-7">
+          <div className="mb-7">
+            <p className="text-sm font-bold uppercase tracking-wide text-brand">IAESTE LC Brno</p>
+            <h1 className="mt-2 text-3xl font-bold text-ink">Přístup zamítnut</h1>
+          </div>
+
+          <p className="text-sm leading-6 text-ink/70">
+            Přihlášený účet <strong className="text-ink">{user.email}</strong> nepatří do povolené domény @
+            {allowedEmailDomain}.
+          </p>
 
           <button
-            className="mt-3 w-full rounded-md border border-line bg-white px-4 py-3 font-bold text-ink transition hover:border-brand hover:text-brand disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={Boolean(busyAction)}
-            onClick={() => void resendVerification()}
+            className="mt-6 w-full rounded-md border border-line bg-white px-4 py-3 font-bold text-ink/70 transition hover:border-coral hover:text-coral"
+            onClick={() => void signOut(auth)}
             type="button"
           >
-            {busyAction === 'send' ? 'Odesílám...' : 'Poslat e-mail znovu'}
+            Odhlásit se
+          </button>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function UnverifiedAccount({ user, onRefresh }: { user: User; onRefresh: () => void }) {
+  async function refreshUser() {
+    await user.reload();
+    await user.getIdToken(true);
+    onRefresh();
+  }
+
+  return (
+    <main className="min-h-screen bg-mist px-4 py-8 sm:px-6">
+      <section className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md items-center">
+        <div className="w-full rounded-lg border border-line bg-white p-5 shadow-panel sm:p-7">
+          <div className="mb-7">
+            <p className="text-sm font-bold uppercase tracking-wide text-brand">IAESTE LC Brno</p>
+            <h1 className="mt-2 text-3xl font-bold text-ink">Neověřený účet</h1>
+          </div>
+
+          <p className="text-sm leading-6 text-ink/70">
+            Google účet <strong className="text-ink">{user.email}</strong> není ve Firebase označený jako ověřený.
+          </p>
+
+          <button
+            className="mt-6 w-full rounded-md bg-brand px-4 py-3 font-bold text-white transition hover:bg-brand/90"
+            onClick={() => void refreshUser()}
+            type="button"
+          >
+            Zkontrolovat znovu
           </button>
 
           <button
@@ -889,22 +728,46 @@ function parseAmount(value: string) {
   return Number(value.replace(',', '.'));
 }
 
-function getRegistrationErrorMessage(error: unknown) {
+function isAllowedWorkspaceEmail(email: string | null) {
+  return Boolean(email?.toLowerCase().endsWith(`@${allowedEmailDomain}`));
+}
+
+function getGoogleSignInErrorMessage(error: unknown) {
   const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
 
-  if (code === 'auth/email-already-in-use') {
-    return 'Účet s tímto e-mailem už existuje.';
+  if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+    return 'Přihlášení bylo zrušeno.';
   }
 
-  if (code === 'auth/weak-password') {
-    return 'Heslo musí mít alespoň 6 znaků.';
+  if (code === 'auth/popup-blocked') {
+    return 'Prohlížeč zablokoval přihlašovací okno. Povolte vyskakovací okna a zkuste to znovu.';
   }
 
-  if (code === 'auth/invalid-email') {
-    return 'E-mail není ve správném formátu.';
+  if (code === 'auth/account-exists-with-different-credential') {
+    return 'Pro tento e-mail už ve Firebase existuje jiný způsob přihlášení. Smažte nebo propojte původní e-mail/heslo účet.';
   }
 
-  return 'Registrace se nepodařila.';
+  return 'Přihlášení přes Google se nepodařilo.';
+}
+
+function GoogleIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24">
+      <path
+        d="M21.8 12.2c0-.7-.1-1.3-.2-1.9H12v3.6h5.5a4.7 4.7 0 0 1-2 3.1v2.6h3.2c1.9-1.8 3.1-4.3 3.1-7.4Z"
+        fill="#4285F4"
+      />
+      <path
+        d="M12 22c2.7 0 5-0.9 6.7-2.4L15.5 17c-.9.6-2 .9-3.5.9a6.1 6.1 0 0 1-5.7-4.2H3v2.6A10 10 0 0 0 12 22Z"
+        fill="#34A853"
+      />
+      <path d="M6.3 13.7a6 6 0 0 1 0-3.4V7.7H3a10 10 0 0 0 0 8.6l3.3-2.6Z" fill="#FBBC05" />
+      <path
+        d="M12 6.1c1.5 0 2.8.5 3.8 1.5l2.9-2.9A9.7 9.7 0 0 0 12 2a10 10 0 0 0-9 5.7l3.3 2.6A6.1 6.1 0 0 1 12 6.1Z"
+        fill="#EA4335"
+      />
+    </svg>
+  );
 }
 
 function CameraIcon() {

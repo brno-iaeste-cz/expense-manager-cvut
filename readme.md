@@ -6,11 +6,11 @@ Mobile-first receipt and company expense capture app.
 
 - React + Vite
 - Tailwind CSS
-- Firebase Authentication with email/password
+- Firebase Authentication with Google Workspace sign-in
 - Hono on a Cloudflare Pages advanced Worker
 - Google Apps Script for Google Sheets and Google Drive writes
 
-The browser app signs users in with Firebase. The Cloudflare Pages Worker verifies the Firebase ID token, converts the uploaded receipt image to base64, and forwards the expense to a private Apps Script webhook. Apps Script saves the image to Drive and appends the row to the Sheet.
+The browser app signs users in with Firebase using Google as the identity provider. Access is restricted to `@iaeste.cz` accounts in the browser and enforced again by the Cloudflare Pages Worker after it verifies the Firebase ID token. The Worker converts the uploaded receipt image to base64 and forwards the expense to a private Apps Script webhook. Apps Script saves the image to Drive and appends the row to the Sheet.
 
 ## Local Setup
 
@@ -62,6 +62,23 @@ Open:
 ```text
 http://127.0.0.1:8788
 ```
+
+## Firebase Authentication Setup
+
+1. In Firebase Console, open **Authentication** -> **Sign-in method**.
+2. Enable **Google** as a provider.
+3. Set the support email and save the provider.
+4. Disable **Email/Password** after the Google sign-in flow has been tested.
+5. Open **Authentication** -> **Settings** -> **Authorized domains**.
+6. Add the domains you use to serve the app:
+   - `localhost` for local Vite development
+   - your Cloudflare Pages domain
+   - any custom production domain
+7. In Google Cloud Console for the same Firebase project, open **APIs & Services** -> **OAuth consent screen** and make sure the app is configured for the IAESTE Google Workspace organization.
+
+The app asks Google for the hosted domain `iaeste.cz`, but that is only a sign-in hint. The actual security check is the Worker-side token check that rejects any expense API request unless the verified Firebase email ends with `@iaeste.cz`.
+
+If an existing user was created with email/password using the same `@iaeste.cz` email, Google sign-in can fail with `auth/account-exists-with-different-credential`. Delete that old Firebase Auth user or link the Google provider to it before disabling email/password.
 
 ## Apps Script Setup
 
