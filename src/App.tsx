@@ -19,15 +19,18 @@ import type { CategorySearchResult } from './categories';
 const emptyForm: ExpenseForm = {
   name: '',
   amount: '',
-  department: 'PR',
-  category: 'Promo akce',
-  subcategory: 'Zaškolovák 1+2',
+  department: '',
+  category: '',
+  subcategory: '',
   paymentMethod: 'Invoice',
 };
 
 const categoriesSpreadsheetId =
   import.meta.env.EXPENSES_SPREADSHEET_ID ?? '1dMACC3Gyeor0Xv-mh0sN1y7sDOepLLiNeljMUqwdjWE';
 const categoriesSpreadsheetUrl = `https://docs.google.com/spreadsheets/d/${categoriesSpreadsheetId}/edit`;
+const receiptsFolderId =
+  import.meta.env.EXPENSES_RECEIPTS_FOLDER_ID ?? '1mwZucy4X0_FLU8xP6h8qYfvH8uadM001';
+const receiptsFolderUrl = `https://drive.google.com/drive/folders/${receiptsFolderId}`;
 
 const paymentMethods = [
   { value: 'Invoice', label: 'Faktura' },
@@ -38,8 +41,25 @@ const paymentMethods = [
 ];
 
 const fieldHints = {
-  paymentMethod:
-    'Vyberte, jak byl výdaj zaplacen. Soukromá platba znamená, že jste výdaj uhradili ze svých peněz.',
+  paymentMethod: (
+    <>
+      <span className="block">
+        <strong>Faktura</strong> - výdaj byl uhrazen fakturou.
+      </span>
+      <span className="block">
+        <strong>Hotovost</strong> - výdaj byl zaplacen IAESTE penězi v hotovosti.
+      </span>
+      <span className="block">
+        <strong>IA karta</strong> - výdaj byl zaplacen IAESTE platební kartou.
+      </span>
+      <span className="block">
+        <strong>Soukromá platba</strong> - výdaj byl zaplacen z peněz člena centra.
+      </span>
+      <span className="block">
+        <strong>Bez dokladu</strong> - k výdaji neexistuje žádný doklad.
+      </span>
+    </>
+  ),
   categorySearch:
     'Začněte psát název oddělení, kategorie nebo subkategorie a vyberte odpovídající položku ze seznamu.',
 };
@@ -383,9 +403,14 @@ function ExpenseApp({ user }: { user: User }) {
   const [categorySearch, setCategorySearch] = useState('');
 
   const formattedUser = user.displayName ?? 'Přihlášeno';
+  const selectedDepartment = departments.find((department) => department.value === form.department);
   const selectedCategories = categoryTree[form.department as keyof typeof categoryTree] ?? [];
   const selectedCategory = selectedCategories.find((category) => category.value === form.category);
   const selectedSubcategories = selectedCategory?.subcategories ?? [];
+  const categorySearchPlaceholder =
+    selectedDepartment && selectedCategory && form.subcategory
+      ? `${selectedDepartment.label} / ${selectedCategory.label} / ${form.subcategory}`
+      : 'Např. Prostory';
   const categorySearchResults = useMemo(() => {
     const query = normalizeText(categorySearch);
     if (!query) return [];
@@ -593,7 +618,9 @@ function ExpenseApp({ user }: { user: User }) {
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
               <h3 className="text-base font-bold text-ink">Zařazení výdaje</h3>
               <span className="max-w-full break-words rounded-md bg-white px-2.5 py-1 text-xs font-bold text-ink/65 sm:text-right">
-                {form.department} / {form.category} / {form.subcategory}
+                {form.department && form.category && form.subcategory
+                  ? `${form.department} / ${form.category} / ${form.subcategory}`
+                  : 'Nevybráno'}
               </span>
             </div>
 
@@ -609,7 +636,7 @@ function ExpenseApp({ user }: { user: User }) {
                     className="field"
                     value={categorySearch}
                     onChange={(event) => setCategorySearch(event.target.value)}
-                    placeholder="Např. Prostory"
+                    placeholder={categorySearchPlaceholder}
                     type="search"
                   />
                   {categorySearch ? (
@@ -643,7 +670,11 @@ function ExpenseApp({ user }: { user: User }) {
                     className="field"
                     value={form.department}
                     onChange={(event) => updateDepartment(event.target.value)}
+                    required
                   >
+                    <option value="" disabled>
+                      Vyberte oddělení
+                    </option>
                     {departments.map((department) => (
                       <option key={department.value} value={department.value}>
                         {department.label}
@@ -660,6 +691,9 @@ function ExpenseApp({ user }: { user: User }) {
                     onChange={(event) => updateCategory(event.target.value)}
                     required
                   >
+                    <option value="" disabled>
+                      Vyberte kategorii
+                    </option>
                     {selectedCategories.map((category) => (
                       <option key={category.value} value={category.value}>
                         {category.label}
@@ -676,6 +710,9 @@ function ExpenseApp({ user }: { user: User }) {
                     onChange={(event) => updateField('subcategory', event.target.value)}
                     required
                   >
+                    <option value="" disabled>
+                      Vyberte subkategorii
+                    </option>
                     {selectedSubcategories.map((subcategory) => (
                       <option key={subcategory} value={subcategory}>
                         {subcategory}
@@ -701,17 +738,25 @@ function ExpenseApp({ user }: { user: User }) {
           </p>
         ) : null}
 
-        <div className="grid gap-3 sm:ml-auto sm:w-auto sm:grid-cols-2">
+        <div className="grid gap-3 sm:ml-auto sm:w-auto sm:grid-cols-3">
           <a
-            className="order-2 block w-full rounded-md border border-line bg-white px-4 py-2.5 text-center font-bold text-ink transition hover:border-brand hover:text-brand focus:outline-none focus:ring-4 focus:ring-brand/15 sm:order-1 sm:w-56"
+            className="order-2 block w-full rounded-md border border-line bg-white px-4 py-2.5 text-center font-bold text-ink transition hover:border-brand hover:text-brand focus:outline-none focus:ring-4 focus:ring-brand/15 sm:order-1 sm:w-52"
             href={categoriesSpreadsheetUrl}
             rel="noreferrer"
             target="_blank"
           >
             Otevřít tabulku výdajů
           </a>
+          <a
+            className="order-3 block w-full rounded-md border border-line bg-white px-4 py-2.5 text-center font-bold text-ink transition hover:border-brand hover:text-brand focus:outline-none focus:ring-4 focus:ring-brand/15 sm:order-2 sm:w-52"
+            href={receiptsFolderUrl}
+            rel="noreferrer"
+            target="_blank"
+          >
+            Otevřít složku účtenek
+          </a>
           <button
-            className="order-1 w-full rounded-md bg-brand px-4 py-2.5 font-bold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60 sm:order-2 sm:w-56"
+            className="order-1 w-full rounded-md bg-brand px-4 py-2.5 font-bold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60 sm:order-3 sm:w-52"
             disabled={!canSubmit || status === 'submitting'}
             type="submit"
           >
@@ -796,7 +841,7 @@ function Field({
 }: {
   label: string;
   id: string;
-  hint?: string;
+  hint?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const hintId = `${id}-hint`;
@@ -818,7 +863,7 @@ function Field({
               ?
             </button>
             <span
-              className="pointer-events-none absolute left-1/2 top-7 z-20 hidden w-64 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-md border border-line bg-white px-3 py-2 text-sm font-medium leading-5 text-ink shadow-panel group-hover:block group-focus-within:block sm:left-0 sm:translate-x-0"
+              className="pointer-events-none absolute left-1/2 top-7 z-20 hidden w-64 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-md border border-line bg-white px-3 py-2 text-sm font-normal leading-5 text-ink shadow-panel group-hover:block group-focus-within:block sm:left-0 sm:translate-x-0"
               id={hintId}
               role="tooltip"
             >
