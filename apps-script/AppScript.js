@@ -3,6 +3,8 @@ const CONFIG = {
   sheetName: 'Expenses',
   expensesSpreadsheetId: '1dMACC3Gyeor0Xv-mh0sN1y7sDOepLLiNeljMUqwdjWE',
   driveFolderId: '1mwZucy4X0_FLU8xP6h8qYfvH8uadM001',
+  emailRecipient: 'martin.tavoda@gmail.com', // finance.brno@iaeste.cz
+  senderAlias: 'it.brno@iaeste.cz',
   secret: 'CHANGE_THIS_TO_A_LONG_RANDOM_SECRET',
 };
 
@@ -12,6 +14,10 @@ function doPost(e) {
 
     if (payload.secret !== CONFIG.secret) {
       return jsonResponse({ ok: false, error: 'Unauthorized.' }, 401);
+    }
+
+    if (payload.action === 'sendExpenseEmail') {
+      return sendExpenseEmail(payload);
     }
 
     const expense = payload.expense;
@@ -114,6 +120,41 @@ function writeExpenseToBudgetSpreadsheet(target, expense, user) {
   target.sheet.getRange(target.row, target.startColumn, 1, 5).setValues([
     [false, Number.isFinite(amount) ? amount : expense.amount, expense.subcategory, note, payer],
   ]);
+}
+
+function sendExpenseEmail(payload) {
+  const email = payload.email || {};
+  const expense = payload.expense || {};
+  const receipt = payload.receipt || {};
+  const user = payload.user || {};
+
+  if (!email.subject || !email.body || !expense.name || !receipt.base64) {
+    return jsonResponse({ ok: false, error: 'Invalid email request.' }, 400);
+  }
+
+  const bytes = Utilities.base64Decode(receipt.base64);
+  const attachment = Utilities.newBlob(
+    bytes,
+    receipt.mimeType || 'image/jpeg',
+    buildReceiptFilename(expense, user, receipt.filename),
+  );
+  const aliases = GmailApp.getAliases();
+  if (aliases.indexOf(CONFIG.senderAlias) === -1) {
+    throw new Error(`Sender alias is not available for this Apps Script account: ${CONFIG.senderAlias}`);
+  }
+
+  GmailApp.sendEmail(CONFIG.emailRecipient, email.subject, email.body, {
+    from: CONFIG.senderAlias,
+    name: user.name || user.email || 'IAESTE Expense Manager',
+    replyTo: user.email || '',
+    attachments: [attachment],
+  });
+
+  return jsonResponse({ ok: true });
+}
+
+function authorizeMailPermission() {
+  GmailApp.getAliases();
 }
 
 function getExpensesSpreadsheetId() {
@@ -232,7 +273,7 @@ function sanitizeFilenamePart(value, fallback, maxLength) {
 function sanitizeAmountForFilename(value) {
   const amount = Number(value);
   if (Number.isFinite(amount)) {
-    return amount.toFixed(2).replace('.', '_');
+    return amount.toFixed(2).replace('.', '-');
   }
 
   return sanitizeFilenamePart(value, '0', 20);

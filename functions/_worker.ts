@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
 import { HTTPException } from 'hono/http-exception';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
@@ -38,6 +38,11 @@ const expenseSchema = z.object({
   paymentMethod: z.string().min(1).max(80),
 });
 
+const emailSchema = z.object({
+  subject: z.string().trim().min(1).max(200),
+  body: z.string().trim().min(1).max(5000),
+});
+
 const app = new Hono<{ Bindings: Env; Variables: Variables }>().basePath('/api');
 
 app.use(
@@ -57,7 +62,7 @@ app.get('/health', (c) =>
   }),
 );
 
-app.use('/expenses', async (c, next) => {
+const requireAuth: MiddlewareHandler<{ Bindings: Env; Variables: Variables }> = async (c, next) => {
   assertEnv(c.env);
 
   const authorization = c.req.header('Authorization');
@@ -98,7 +103,10 @@ app.use('/expenses', async (c, next) => {
   }
 
   await next();
-});
+};
+
+app.use('/expenses', requireAuth);
+app.use('/expense-email', requireAuth);
 
 app.post('/expenses', async (c) => {
   let body: FormData;
@@ -151,6 +159,55 @@ app.post('/expenses', async (c) => {
     receiptFileId: appsScriptPayload.receiptFileId,
     receiptUrl: appsScriptPayload.receiptUrl,
   });
+});
+
+app.post('/expense-email', async (c) => {
+  let body: FormData;
+  try {
+    body = await c.req.raw.formData();
+  } catch (error) {
+    console.error('Could not parse email form data', error);
+    throw new HTTPException(400, { message: 'Could not read submitted email data.' });
+  }
+
+  const receipt = body.get('receipt');
+  if (!isUploadedFile(receipt)) {
+    throw new HTTPException(400, { message: 'Receipt image is required.' });
+  }
+
+  const parsedEmail = emailSchema.safeParse({
+    subject: getFormValue(body, 'subject'),
+    body: getFormValue(body, 'body'),
+  });
+  const parsedExpense = expenseSchema.safeParse({
+    name: getFormValue(body, 'name'),
+    expenseDate: getFormValue(body, 'expenseDate'),
+    amount: getFormValue(body, 'amount'),
+    department: getFormValue(body, 'department'),
+    category: getFormValue(body, 'category'),
+    subcategory: getFormValue(body, 'subcategory'),
+    paymentMethod: getFormValue(body, 'paymentMethod'),
+  });
+
+  if (!parsedEmail.success || !parsedExpense.success) {
+    throw new HTTPException(400, { message: 'Email details are invalid.' });
+  }
+
+  await submitToAppsScript(c.env, {
+    action: 'sendExpenseEmail',
+    secret: c.env.APPS_SCRIPT_SECRET,
+    submittedAt: new Date().toISOString(),
+    user: c.get('user'),
+    email: parsedEmail.data,
+    expense: parsedExpense.data,
+    receipt: {
+      filename: receipt.name,
+      mimeType: receipt.type || 'image/jpeg',
+      base64: arrayBufferToBase64(await receipt.arrayBuffer()),
+    },
+  });
+
+  return c.json({ ok: true });
 });
 
 app.onError((error, c) => {

@@ -234,6 +234,11 @@ function ExpenseApp({ user }: { user: User }) {
   const [status, setStatus] = useState<SubmissionState>('idle');
   const [message, setMessage] = useState('');
   const [categorySearch, setCategorySearch] = useState('');
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [emailStatus, setEmailStatus] = useState<SubmissionState>('idle');
+  const [emailMessage, setEmailMessage] = useState('');
 
   const formattedUser = user.displayName ?? 'Přihlášeno';
   const selectedDepartment = departments.find((department) => department.value === form.department);
@@ -255,6 +260,8 @@ function ExpenseApp({ user }: { user: User }) {
       .slice(0, 6);
   }, [categorySearch]);
   const needsReceipt = form.paymentMethod !== 'No document';
+  const defaultEmailSubject = buildDefaultEmailSubject(form.name);
+  const defaultEmailBody = buildDefaultEmailBody(form.name, form.amount, formattedUser);
 
   useEffect(() => {
     if (!receipt) {
@@ -373,6 +380,43 @@ function ExpenseApp({ user }: { user: User }) {
     } catch (error) {
       setStatus('error');
       setMessage(error instanceof Error ? error.message : 'Výdaj se nepodařilo odeslat.');
+    }
+  }
+
+  async function sendExpenseEmail() {
+    if (!receipt || emailStatus === 'submitting') return;
+
+    setEmailStatus('submitting');
+    setEmailMessage('');
+
+    const payload = new FormData();
+    payload.append('subject', emailSubject.trim() || defaultEmailSubject);
+    payload.append('body', emailBody.trim() || defaultEmailBody);
+    Object.entries(form).forEach(([key, value]) => {
+      payload.append(key, key === 'amount' ? value.replace(',', '.') : value);
+    });
+    payload.append('receipt', receipt);
+
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch('/api/expense-email', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: payload,
+      });
+
+      if (!response.ok) {
+        const errorPayload = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(errorPayload?.error ?? 'E-mail se nepodarilo odeslat.');
+      }
+
+      setEmailStatus('success');
+      setEmailMessage('E-mail byl odeslán.');
+    } catch (error) {
+      setEmailStatus('error');
+      setEmailMessage(error instanceof Error ? error.message : 'E-mail se nepodarilo odeslat.');
     }
   }
 
@@ -593,7 +637,7 @@ function ExpenseApp({ user }: { user: User }) {
           </p>
         ) : null}
 
-        <div className="grid gap-3 sm:ml-auto sm:w-auto sm:grid-cols-3">
+        <div className="grid gap-3 sm:ml-auto sm:w-auto sm:grid-cols-4">
           <a
             className="order-2 block w-full rounded-md border border-line bg-white px-4 py-2.5 text-center font-bold text-ink transition hover:border-brand hover:text-brand focus:outline-none focus:ring-4 focus:ring-brand/15 sm:order-1 sm:w-52"
             href={categoriesSpreadsheetUrl}
@@ -611,7 +655,21 @@ function ExpenseApp({ user }: { user: User }) {
             Otevřít složku účtenek
           </a>
           <button
-            className="order-1 w-full rounded-md bg-brand px-4 py-2.5 font-bold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60 sm:order-3 sm:w-52"
+            className="order-1 w-full rounded-md border border-line bg-white px-4 py-2.5 font-bold text-ink transition hover:border-brand hover:text-brand disabled:cursor-not-allowed disabled:opacity-60 sm:order-3 sm:w-52"
+            disabled={!receipt}
+            onClick={() => {
+              setEmailSubject(buildDefaultEmailSubject(form.name));
+              setEmailBody(buildDefaultEmailBody(form.name, form.amount, formattedUser));
+              setEmailDialogOpen(true);
+              setEmailStatus('idle');
+              setEmailMessage('');
+            }}
+            type="button"
+          >
+            E-mail
+          </button>
+          <button
+            className="order-1 w-full rounded-md bg-brand px-4 py-2.5 font-bold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60 sm:order-4 sm:w-52"
             disabled={!canSubmit || status === 'submitting'}
             type="submit"
           >
@@ -619,6 +677,72 @@ function ExpenseApp({ user }: { user: User }) {
           </button>
         </div>
       </form>
+
+      {emailDialogOpen ? (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-ink/40 px-4 py-6">
+          <div className="w-full max-w-lg rounded-lg border border-line bg-white p-5 shadow-panel sm:p-6">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold text-ink">E-mail s dokladem</h2>
+                <p className="mt-1 text-sm text-ink/65">Příloha: {receipt?.name}</p>
+              </div>
+              <button className="icon-button" onClick={() => setEmailDialogOpen(false)} type="button" title="Zavřít">
+                <CloseIcon />
+              </button>
+            </div>
+
+            <div className="grid gap-4">
+              <Field label="Předmět" id="emailSubject">
+                <input
+                  id="emailSubject"
+                  className="field"
+                  placeholder={defaultEmailSubject}
+                  value={emailSubject}
+                  onChange={(event) => setEmailSubject(event.target.value)}
+                />
+              </Field>
+
+              <Field label="Text e-mailu" id="emailBody">
+                <textarea
+                  id="emailBody"
+                  className="field min-h-48 resize-y"
+                  placeholder={defaultEmailBody}
+                  value={emailBody}
+                  onChange={(event) => setEmailBody(event.target.value)}
+                />
+              </Field>
+            </div>
+
+            {emailMessage ? (
+              <p
+                className={`mt-4 rounded-md px-3 py-2 text-sm font-semibold ${
+                  emailStatus === 'success' ? 'bg-green-100 text-green-800' : 'bg-coral/10 text-coral'
+                }`}
+              >
+                {emailMessage}
+              </p>
+            ) : null}
+
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <button
+                className="rounded-md border border-line bg-white px-4 py-2.5 font-bold text-ink transition hover:border-brand hover:text-brand"
+                onClick={() => setEmailDialogOpen(false)}
+                type="button"
+              >
+                Zavřít
+              </button>
+              <button
+                className="rounded-md bg-brand px-4 py-2.5 font-bold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={!receipt || emailStatus === 'submitting'}
+                onClick={() => void sendExpenseEmail()}
+                type="button"
+              >
+                {emailStatus === 'submitting' ? 'Odesílám...' : 'Odeslat'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -744,6 +868,23 @@ function parseAmount(value: string) {
   return Number(value.replace(',', '.'));
 }
 
+function buildDefaultEmailSubject(expenseName: string) {
+  return `Účetní doklad - ${expenseName.trim() || 'Název'}`;
+}
+
+function buildDefaultEmailBody(expenseName: string, amount: string, userName: string) {
+  return [
+    'Ahoj,',
+    '',
+    `v příloze posílám doklad k "${expenseName.trim() || 'Název'}" v sumě ${amount.trim() || 'Částka'} Kč.`,
+    '',
+    'Děkuji.',
+    '',
+    userName,
+    'Email bol zaslaný zo systému Expense Manager.',
+  ].join('\n');
+}
+
 function createEmptyForm(): ExpenseForm {
   return {
     name: '',
@@ -825,6 +966,14 @@ function LogOutIcon() {
     <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
       <path d="M10 6H6v12h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       <path d="M14 8l4 4-4 4m4-4H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
+      <path d="M7 7l10 10M17 7 7 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
