@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+﻿import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   User,
   browserLocalPersistence,
@@ -374,9 +374,6 @@ function ExpenseApp({ user }: { user: User }) {
 
       setStatus('success');
       setMessage('Výdaj byl uložen.');
-      setForm(createEmptyForm());
-      setReceipt(null);
-      setCategorySearch('');
     } catch (error) {
       setStatus('error');
       setMessage(error instanceof Error ? error.message : 'Výdaj se nepodařilo odeslat.');
@@ -454,7 +451,7 @@ function ExpenseApp({ user }: { user: User }) {
               <Field label="Název" id="name">
               <input
                 id="name"
-                className="field"
+                className="field text-base"
                 placeholder="Např. Catering"
                 value={form.name}
                 onChange={(event) => updateField('name', event.target.value)}
@@ -466,7 +463,7 @@ function ExpenseApp({ user }: { user: User }) {
             <Field label="Datum uskutečnění výdaje" id="expenseDate">
               <input
                 id="expenseDate"
-                className="field"
+                className="field text-base"
                 type="date"
                 value={form.expenseDate}
                 onChange={(event) => updateField('expenseDate', event.target.value)}
@@ -478,7 +475,7 @@ function ExpenseApp({ user }: { user: User }) {
               <div className="relative">
                 <input
                   id="amount"
-                  className="field pr-16"
+                  className="field pr-16 text-base"
                   inputMode="decimal"
                   placeholder="0.00"
                   type="text"
@@ -500,7 +497,7 @@ function ExpenseApp({ user }: { user: User }) {
             >
                 <select
                   id="paymentMethod"
-                  className="field"
+                  className="field text-base"
                   value={form.paymentMethod}
                   onChange={(event) => updateField('paymentMethod', event.target.value)}
                 >
@@ -532,7 +529,7 @@ function ExpenseApp({ user }: { user: User }) {
                 <div className="relative">
                   <input
                     id="categorySearch"
-                    className="field"
+                    className="field text-base"
                     value={categorySearch}
                     onChange={(event) => setCategorySearch(event.target.value)}
                     placeholder={categorySearchPlaceholder}
@@ -566,7 +563,7 @@ function ExpenseApp({ user }: { user: User }) {
                 <Field label="Oddělení" id="department">
                   <select
                     id="department"
-                    className="field"
+                    className="field text-base"
                     value={form.department}
                     onChange={(event) => updateDepartment(event.target.value)}
                     required
@@ -585,7 +582,7 @@ function ExpenseApp({ user }: { user: User }) {
                 <Field label="Kategorie" id="category">
                   <select
                     id="category"
-                    className="field"
+                    className="field text-base"
                     value={form.category}
                     onChange={(event) => updateCategory(event.target.value)}
                     required
@@ -604,7 +601,7 @@ function ExpenseApp({ user }: { user: User }) {
                 <Field label="Subkategorie" id="subcategory">
                   <select
                     id="subcategory"
-                    className="field"
+                    className="field text-base"
                     value={form.subcategory}
                     onChange={(event) => updateField('subcategory', event.target.value)}
                     required
@@ -628,53 +625,69 @@ function ExpenseApp({ user }: { user: User }) {
           <ReceiptPanel receipt={receipt} previewUrl={previewUrl} onReceiptChange={setReceipt} />
         </div>
 
-        {message ? (
-          <p
-            className={`rounded-md px-3 py-2 text-sm font-semibold ${status === 'success' ? 'bg-green-100 text-green-800' : 'bg-coral/10 text-coral'
-              }`}
-          >
-            {message}
-          </p>
-        ) : null}
+        <div className="grid gap-3 min-[600px]:grid-cols-2 min-[1025px]:grid-cols-[auto_minmax(0,1fr)_auto] min-[1025px]:items-start">
+          {message ? (
+            <p
+              className={`rounded-md px-3 py-2 text-sm font-semibold min-[600px]:col-span-2 min-[1025px]:hidden ${status === 'success' ? 'bg-green-100 text-green-800' : 'bg-coral/10 text-coral'
+                }`}
+            >
+              {message}
+            </p>
+          ) : null}
 
-        <div className="grid gap-3 sm:ml-auto sm:w-auto sm:grid-cols-4">
-          <a
-            className="order-2 block w-full rounded-md border border-line bg-white px-4 py-2.5 text-center font-bold text-ink transition hover:border-brand hover:text-brand focus:outline-none focus:ring-4 focus:ring-brand/15 sm:order-1 sm:w-52"
-            href={categoriesSpreadsheetUrl}
-            rel="noreferrer"
-            target="_blank"
-          >
-            Otevřít tabulku výdajů
-          </a>
-          <a
-            className="order-3 block w-full rounded-md border border-line bg-white px-4 py-2.5 text-center font-bold text-ink transition hover:border-brand hover:text-brand focus:outline-none focus:ring-4 focus:ring-brand/15 sm:order-2 sm:w-52"
-            href={receiptsFolderUrl}
-            rel="noreferrer"
-            target="_blank"
-          >
-            Otevřít složku účtenek
-          </a>
-          <button
-            className="order-1 w-full rounded-md border border-line bg-white px-4 py-2.5 font-bold text-ink transition hover:border-brand hover:text-brand disabled:cursor-not-allowed disabled:opacity-60 sm:order-3 sm:w-52"
-            disabled={!receipt}
-            onClick={() => {
-              setEmailSubject(buildDefaultEmailSubject(form.name));
-              setEmailBody(buildDefaultEmailBody(form.name, form.amount, formattedUser));
-              setEmailDialogOpen(true);
-              setEmailStatus('idle');
-              setEmailMessage('');
-            }}
-            type="button"
-          >
-            E-mail
-          </button>
-          <button
-            className="order-1 w-full rounded-md bg-brand px-4 py-2.5 font-bold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60 sm:order-4 sm:w-52"
-            disabled={!canSubmit || status === 'submitting'}
-            type="submit"
-          >
-            {status === 'submitting' ? 'Ukládám...' : 'Uložit výdaj'}
-          </button>
+          <div className="contents min-[600px]:grid min-[600px]:gap-3 min-[1025px]:grid-cols-2">
+            <a
+              className="order-3 block w-full rounded-md border border-line bg-white px-4 py-2.5 text-center font-bold text-ink transition hover:border-brand hover:text-brand focus:outline-none focus:ring-4 focus:ring-brand/15 min-[600px]:order-none min-[1025px]:w-52"
+              href={categoriesSpreadsheetUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Otevřít tabulku výdajů
+            </a>
+            <a
+              className="order-4 block w-full rounded-md border border-line bg-white px-4 py-2.5 text-center font-bold text-ink transition hover:border-brand hover:text-brand focus:outline-none focus:ring-4 focus:ring-brand/15 min-[600px]:order-none min-[1025px]:w-52"
+              href={receiptsFolderUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Otevřít složku účtenek
+            </a>
+          </div>
+
+          <div className="contents min-[600px]:grid min-[600px]:gap-3 min-[1025px]:col-start-3 min-[1025px]:w-[27rem]">
+            <div className="contents min-[600px]:grid min-[600px]:gap-3 min-[1025px]:grid-cols-2">
+              <button
+                className="order-2 w-full rounded-md border border-line bg-white px-4 py-2.5 font-bold text-ink transition hover:border-brand hover:text-brand disabled:cursor-not-allowed disabled:opacity-60 min-[600px]:order-none min-[1025px]:w-52"
+                disabled={!receipt}
+                onClick={() => {
+                  setEmailSubject(buildDefaultEmailSubject(form.name));
+                  setEmailBody(buildDefaultEmailBody(form.name, form.amount, formattedUser));
+                  setEmailDialogOpen(true);
+                  setEmailStatus('idle');
+                  setEmailMessage('');
+                }}
+                type="button"
+              >
+                E-mail
+              </button>
+              <button
+                className="order-1 w-full rounded-md bg-brand px-4 py-2.5 font-bold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60 min-[600px]:order-none min-[1025px]:w-52"
+                disabled={!canSubmit || status === 'submitting'}
+                type="submit"
+              >
+                {status === 'submitting' ? 'Ukládám...' : 'Uložit výdaj'}
+              </button>
+            </div>
+
+            {message ? (
+              <p
+                className={`hidden rounded-md px-3 py-2 text-sm font-semibold min-[1025px]:block ${status === 'success' ? 'bg-green-100 text-green-800' : 'bg-coral/10 text-coral'
+                  }`}
+              >
+                {message}
+              </p>
+            ) : null}
+          </div>
         </div>
       </form>
 
@@ -695,7 +708,7 @@ function ExpenseApp({ user }: { user: User }) {
               <Field label="Předmět" id="emailSubject">
                 <input
                   id="emailSubject"
-                  className="field"
+                  className="field text-sm"
                   placeholder={defaultEmailSubject}
                   value={emailSubject}
                   onChange={(event) => setEmailSubject(event.target.value)}
@@ -705,7 +718,7 @@ function ExpenseApp({ user }: { user: User }) {
               <Field label="Text e-mailu" id="emailBody">
                 <textarea
                   id="emailBody"
-                  className="field min-h-48 resize-y"
+                  className="field min-h-48 resize-y text-sm"
                   placeholder={defaultEmailBody}
                   value={emailBody}
                   onChange={(event) => setEmailBody(event.target.value)}
@@ -881,7 +894,7 @@ function buildDefaultEmailBody(expenseName: string, amount: string, userName: st
     'Děkuji.',
     '',
     userName,
-    'Email bol zaslaný zo systému Expense Manager.',
+    'Email byl zaslán ze systému Expense Manager.',
   ].join('\n');
 }
 
@@ -979,3 +992,4 @@ function CloseIcon() {
 }
 
 export default App;
+
