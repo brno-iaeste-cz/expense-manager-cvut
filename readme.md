@@ -1,4 +1,4 @@
-# IAESTE LC Brno Expense Manager
+﻿# IAESTE LC Brno Expense Manager
 
 Mobile-first receipt and company expense capture app.
 
@@ -82,6 +82,14 @@ If an existing user was created with email/password using the same `@iaeste.cz` 
 
 ## Apps Script Setup
 
+Apps Script editor:
+
+```text
+https://script.google.com/d/1TjpmW9PgHD1pEY05JNfhucnzw66Xsj0YYiShKNZW105PvqM8VYk6SByZ/edit?usp=sharing
+```
+
+The script can be edited by anyone who has access through the `it.brno@iaeste.cz` group.
+
 1. Open the existing Google Sheet.
 2. Go to **Extensions** -> **Apps Script**.
 3. Replace the script contents with [apps-script/Code.gs](apps-script/Code.gs).
@@ -130,7 +138,7 @@ The Apps Script appends data in that order.
 
 Expense departments, categories, and subcategories are generated into `src/categories.ts` from the budgeting Google Sheet.
 
-Run a manual sync:
+Run a manual sync when the budgeting spreadsheet categories change:
 
 ```bash
 npm run categories:sync
@@ -150,7 +158,7 @@ PR, HR, EX, Akce, Projekty, Cesťák
 
 Only tabs that contain category blocks are written to `src/categories.ts`. A category block is detected by a `Výdaje` cell in the second row. The category name is read from the first row of that same column, and subcategories are read from the same column under `Odvětví` until `Cena`.
 
-`npm run build` runs the sync automatically before building. This prebuild sync is optional: if the spreadsheet cannot be downloaded, the build continues with the last generated `src/categories.ts`.
+`npm run build` does not sync categories automatically. If you need fresh categories, run `npm run categories:sync` manually before `npm run build`. If you skip the manual sync, the build uses the current checked-in `src/categories.ts`.
 
 To use a different spreadsheet or tab list:
 
@@ -206,3 +214,4 @@ npm run deploy:pages
 ```
 
 Also add your Cloudflare Pages domain to Firebase Authentication authorized domains before testing the deployed site.
+

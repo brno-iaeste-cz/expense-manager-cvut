@@ -260,8 +260,10 @@ function ExpenseApp({ user }: { user: User }) {
       .slice(0, 6);
   }, [categorySearch]);
   const needsReceipt = form.paymentMethod !== 'No document';
+  const selectedPaymentMethodLabel =
+    paymentMethods.find((method) => method.value === form.paymentMethod)?.label ?? form.paymentMethod;
   const defaultEmailSubject = buildDefaultEmailSubject(form.name);
-  const defaultEmailBody = buildDefaultEmailBody(form.name, form.amount, formattedUser);
+  const defaultEmailBody = buildDefaultEmailBody(form.name, form.amount, selectedPaymentMethodLabel, formattedUser);
 
   useEffect(() => {
     if (!receipt) {
@@ -373,7 +375,7 @@ function ExpenseApp({ user }: { user: User }) {
       }
 
       setStatus('success');
-      setMessage('Výdaj byl uložen.');
+      setMessage('Výdaj byl uložen. Pro zadání nového výdaje obnovte stránku.');
     } catch (error) {
       setStatus('error');
       setMessage(error instanceof Error ? error.message : 'Výdaj se nepodařilo odeslat.');
@@ -661,7 +663,7 @@ function ExpenseApp({ user }: { user: User }) {
                 disabled={!receipt}
                 onClick={() => {
                   setEmailSubject(buildDefaultEmailSubject(form.name));
-                  setEmailBody(buildDefaultEmailBody(form.name, form.amount, formattedUser));
+                  setEmailBody(buildDefaultEmailBody(form.name, form.amount, selectedPaymentMethodLabel, formattedUser));
                   setEmailDialogOpen(true);
                   setEmailStatus('idle');
                   setEmailMessage('');
@@ -697,6 +699,9 @@ function ExpenseApp({ user }: { user: User }) {
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-bold text-ink">E-mail s dokladem</h2>
+                <p className="mt-1 text-sm text-ink/65">
+                  Příjemce: finance.brno@iaeste.cz
+                </p>
                 <p className="mt-1 text-sm text-ink/65">Příloha: {receipt?.name}</p>
               </div>
               <button className="icon-button" onClick={() => setEmailDialogOpen(false)} type="button" title="Zavřít">
@@ -885,11 +890,11 @@ function buildDefaultEmailSubject(expenseName: string) {
   return `Účetní doklad - ${expenseName.trim() || 'Název'}`;
 }
 
-function buildDefaultEmailBody(expenseName: string, amount: string, userName: string) {
+function buildDefaultEmailBody(expenseName: string, amount: string, paymentMethod: string, userName: string) {
   return [
     'Ahoj,',
     '',
-    `v příloze posílám doklad k "${expenseName.trim() || 'Název'}" v sumě ${amount.trim() || 'Částka'} Kč.`,
+    `v příloze posílám doklad k "${expenseName.trim() || 'Název'}" v sumě ${amount.trim() || 'Částka'} Kč. Výdaj byl zaplacen způsobem: ${paymentMethod || 'Neznámý'}.`,
     '',
     'Děkuji.',
     '',

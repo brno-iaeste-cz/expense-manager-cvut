@@ -27,6 +27,13 @@ const firebaseKeys = createRemoteJWKSet(
 );
 
 const allowedEmailDomain = 'iaeste.cz';
+const paymentMethodLabels: Record<string, string> = {
+  Invoice: 'Faktura',
+  Cash: 'Hotovost',
+  'IA Card': 'IA karta',
+  Private: 'Soukromá platba',
+  'No document': 'Bez dokladu',
+};
 
 const expenseSchema = z.object({
   name: z.string().min(1).max(160),
@@ -150,7 +157,7 @@ app.post('/expenses', async (c) => {
     secret: c.env.APPS_SCRIPT_SECRET,
     submittedAt: new Date().toISOString(),
     user,
-    expense: parsedExpense.data,
+    expense: translateExpenseForAppsScript(parsedExpense.data),
     receipt: receiptPayload,
   });
 
@@ -199,7 +206,7 @@ app.post('/expense-email', async (c) => {
     submittedAt: new Date().toISOString(),
     user: c.get('user'),
     email: parsedEmail.data,
-    expense: parsedExpense.data,
+    expense: translateExpenseForAppsScript(parsedExpense.data),
     receipt: {
       filename: receipt.name,
       mimeType: receipt.type || 'image/jpeg',
@@ -284,6 +291,13 @@ function getConfigPresence(env: Env) {
 function getFormValue(body: FormData, key: string) {
   const value = body.get(key);
   return typeof value === 'string' ? value : '';
+}
+
+function translateExpenseForAppsScript(expense: z.infer<typeof expenseSchema>) {
+  return {
+    ...expense,
+    paymentMethod: paymentMethodLabels[expense.paymentMethod] ?? expense.paymentMethod,
+  };
 }
 
 function isAllowedWorkspaceEmail(email: string) {

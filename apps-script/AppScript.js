@@ -24,7 +24,7 @@ function doPost(e) {
     const receipt = payload.receipt;
     const user = payload.user || {};
 
-    if (!expense || (expense.paymentMethod !== 'No document' && (!receipt || !receipt.base64))) {
+    if (!expense || (expense.paymentMethod !== 'Bez dokladu' && (!receipt || !receipt.base64))) {
       return jsonResponse({ ok: false, error: 'Invalid request.' }, 400);
     }
 
@@ -110,7 +110,7 @@ function writeExpenseToBudgetSpreadsheet(target, expense, user) {
   const amount = Number(expense.amount);
   const note = expense.name;
   let payer = '';
-  if (expense.paymentMethod != 'Private'){
+  if (expense.paymentMethod != 'Soukromá platba'){
     payer = expense.paymentMethod || '';
   } else{
     payer = user.name || user.email || '';
