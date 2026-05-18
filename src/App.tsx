@@ -141,7 +141,7 @@ function GoogleAuthScreen() {
             </p>
           </div>
 
-          {error ? <p className="mt-4 rounded-md bg-coral/10 px-3 py-2 text-sm text-coral">{error}</p> : null}
+          {error ? <p className="mt-4 rounded-md bg-coral/10 px-3 py-2 text-sm text-red-700">{error}</p> : null}
 
           <button
             className="mt-6 flex w-full items-center justify-center gap-3 rounded-md border border-line bg-white px-4 py-3 font-bold text-ink transition hover:border-brand hover:text-brand disabled:cursor-not-allowed disabled:opacity-60"
@@ -174,7 +174,7 @@ function AccessDenied({ user }: { user: User }) {
           </p>
 
           <button
-            className="mt-6 w-full rounded-md border border-line bg-white px-4 py-3 font-bold text-ink/70 transition hover:border-coral hover:text-coral"
+            className="mt-6 w-full rounded-md border border-line bg-white px-4 py-3 font-bold text-ink/70 transition hover:border-red-700 hover:text-red-700"
             onClick={() => void signOut(auth)}
             type="button"
           >
@@ -215,7 +215,7 @@ function UnverifiedAccount({ user, onRefresh }: { user: User; onRefresh: () => v
           </button>
 
           <button
-            className="mt-3 w-full rounded-md border border-line bg-white px-4 py-3 font-bold text-ink/70 transition hover:border-coral hover:text-coral"
+            className="mt-3 w-full rounded-md border border-line bg-white px-4 py-3 font-bold text-ink/70 transition hover:border-red-700 hover:text-red-700"
             onClick={() => void signOut(auth)}
             type="button"
           >
@@ -629,11 +629,24 @@ function ExpenseApp({ user }: { user: User }) {
 
         <div className="grid gap-3 min-[600px]:grid-cols-2 min-[1025px]:grid-cols-[auto_minmax(0,1fr)_auto] min-[1025px]:items-start">
           {message ? (
-            <p
-              className={`rounded-md px-3 py-2 text-sm font-semibold min-[600px]:col-span-2 min-[1025px]:hidden ${status === 'success' ? 'bg-green-100 text-green-800' : 'bg-coral/10 text-coral'
-                }`}
-            >
-              {message}
+            <>
+              <p
+                className={`rounded-md px-3 py-2 text-center text-sm font-semibold min-[600px]:col-span-2 min-[1025px]:hidden ${status === 'success' ? 'bg-green-100 text-green-800' : 'bg-coral/10 text-red-700'
+                  }`}
+              >
+                {message}
+              </p>
+              {status === 'success' ? (
+                <p className="rounded-md px-3 text-center text-xl font-extrabold text-red-700 min-[600px]:col-span-2 min-[1025px]:hidden">
+                  Fyzickou účtenku uschovejte do složky v kanceláři!
+                </p>
+              ) : null}
+            </>
+          ) : null}
+
+          {status === 'success' ? (
+            <p className="hidden rounded-md px-3 pb-3 text-center text-2xl font-extrabold text-red-700 min-[1025px]:col-span-3 min-[1025px]:block">
+              Fyzickou účtenku uschovejte do složky v kanceláři!
             </p>
           ) : null}
 
@@ -682,12 +695,14 @@ function ExpenseApp({ user }: { user: User }) {
             </div>
 
             {message ? (
-              <p
-                className={`hidden rounded-md px-3 py-2 text-sm font-semibold min-[1025px]:block ${status === 'success' ? 'bg-green-100 text-green-800' : 'bg-coral/10 text-coral'
-                  }`}
-              >
-                {message}
-              </p>
+              <>
+                <p
+                  className={`hidden rounded-md px-3 py-2 text-sm font-semibold min-[1025px]:block ${status === 'success' ? 'bg-green-100 text-green-800' : 'bg-coral/10 text-red-700'
+                    }`}
+                >
+                  {message}
+                </p>
+              </>
             ) : null}
           </div>
         </div>
@@ -734,7 +749,7 @@ function ExpenseApp({ user }: { user: User }) {
             {emailMessage ? (
               <p
                 className={`mt-4 rounded-md px-3 py-2 text-sm font-semibold ${
-                  emailStatus === 'success' ? 'bg-green-100 text-green-800' : 'bg-coral/10 text-coral'
+                  emailStatus === 'success' ? 'bg-green-100 text-green-800' : 'bg-coral/10 text-red-700'
                 }`}
               >
                 {emailMessage}
@@ -818,7 +833,7 @@ function ReceiptPanel({
         <div className="mt-4 flex items-center justify-between gap-3 rounded-md bg-mist px-3 py-2">
           <span className="truncate text-sm font-semibold text-ink">{receipt.name}</span>
           <button
-            className="rounded-md px-2 py-1 text-sm font-bold text-coral hover:bg-coral/10"
+            className="rounded-md px-2 py-1 text-sm font-bold text-red-700 hover:bg-coral/10"
             onClick={() => onReceiptChange(null)}
             type="button"
           >
