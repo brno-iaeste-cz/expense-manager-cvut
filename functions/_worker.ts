@@ -141,14 +141,14 @@ app.post('/expenses', async (c) => {
   }
 
   if (parsedExpense.data.paymentMethod !== 'No document' && !isUploadedFile(receipt)) {
-    throw new HTTPException(400, { message: 'Receipt image is required.' });
+    throw new HTTPException(400, { message: 'Receipt document is required.' });
   }
 
   const user = c.get('user');
   const receiptPayload = isUploadedFile(receipt)
     ? {
         filename: receipt.name,
-        mimeType: receipt.type || 'image/jpeg',
+        mimeType: getUploadedFileMimeType(receipt),
         base64: arrayBufferToBase64(await receipt.arrayBuffer()),
       }
     : null;
@@ -179,7 +179,7 @@ app.post('/expense-email', async (c) => {
 
   const receipt = body.get('receipt');
   if (!isUploadedFile(receipt)) {
-    throw new HTTPException(400, { message: 'Receipt image is required.' });
+    throw new HTTPException(400, { message: 'Receipt document is required.' });
   }
 
   const parsedEmail = emailSchema.safeParse({
@@ -209,7 +209,7 @@ app.post('/expense-email', async (c) => {
     expense: translateExpenseForAppsScript(parsedExpense.data),
     receipt: {
       filename: receipt.name,
-      mimeType: receipt.type || 'image/jpeg',
+      mimeType: getUploadedFileMimeType(receipt),
       base64: arrayBufferToBase64(await receipt.arrayBuffer()),
     },
   });
@@ -337,6 +337,19 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
   }
 
   return btoa(binary);
+}
+
+function getUploadedFileMimeType(file: File) {
+  const mimeType = String(file.type || '').trim().toLowerCase();
+  if (mimeType) {
+    return mimeType;
+  }
+
+  if (file.name.toLowerCase().endsWith('.pdf')) {
+    return 'application/pdf';
+  }
+
+  return 'application/octet-stream';
 }
 
 export default {

@@ -92,7 +92,7 @@ The script can be edited by anyone who has access through the `it.brno@iaeste.cz
 
 1. Open the existing Google Sheet.
 2. Go to **Extensions** -> **Apps Script**.
-3. Replace the script contents with [apps-script/Code.gs](apps-script/Code.gs).
+3. Replace the script contents with [apps-script/apps-script/Kód.js](apps-script/apps-script/Kód.js).
 4. In the script, set:
    - `sheetId`
    - `sheetName`
@@ -106,6 +106,23 @@ The script can be edited by anyone who has access through the `it.brno@iaeste.cz
 9. Deploy and authorize the script.
 10. Copy the Web app URL into `APPS_SCRIPT_WEB_APP_URL`.
 11. Use the same script `secret` value for `APPS_SCRIPT_SECRET`.
+
+If you manage the existing Apps Script project with `clasp`, use the repo config in [apps-script/.clasp.json](apps-script/.clasp.json) and deploy updates from the `apps-script` directory:
+
+```bash
+cd apps-script
+clasp login
+clasp push
+clasp create-version "versionName"
+clasp create-deployment -V <version> -d "Development version" -i AKfycbxglT-AJP83Vv7hzP0ehoU9oJNyjU2AKhb9VY9m2qAj0CvQRSO0DOUKausZ59FBdB0I
+```
+
+Useful inspection commands:
+
+```bash
+clasp deployments
+clasp versions
+```
 
 The web app URL is public, so the secret must be long and unguessable. A good value is at least 32 random characters.
 
@@ -214,4 +231,3 @@ npm run deploy:pages
 ```
 
 Also add your Cloudflare Pages domain to Firebase Authentication authorized domains before testing the deployed site.
-

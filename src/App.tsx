@@ -12,6 +12,12 @@ import { auth } from './firebase';
 import { ExpenseForm, SubmissionState } from './types';
 import { categorySearchIndex, categoryTree, departments } from './categories';
 import type { CategorySearchResult } from './categories';
+import {
+  getReceiptAcceptAttribute,
+  getReceiptPreviewType,
+  isSupportedReceiptFile,
+  prepareReceiptFile,
+} from './receipt-file';
 
 const allowedEmailDomain = 'iaeste.cz';
 const logoSrc = '/iaeste-lc-brno-logo.png';
@@ -230,7 +236,10 @@ function UnverifiedAccount({ user, onRefresh }: { user: User; onRefresh: () => v
 function ExpenseApp({ user }: { user: User }) {
   const [form, setForm] = useState<ExpenseForm>(emptyForm);
   const [receipt, setReceipt] = useState<File | null>(null);
+  const [preparedReceipt, setPreparedReceipt] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState('');
+  const [receiptProcessing, setReceiptProcessing] = useState(false);
+  const [receiptError, setReceiptError] = useState('');
   const [status, setStatus] = useState<SubmissionState>('idle');
   const [message, setMessage] = useState('');
   const [categorySearch, setCategorySearch] = useState('');
@@ -278,14 +287,14 @@ function ExpenseApp({ user }: { user: User }) {
 
   const canSubmit = useMemo(() => {
     return Boolean(
-      (!needsReceipt || receipt) &&
+      (!needsReceipt || preparedReceipt) &&
       form.name.trim() &&
       form.expenseDate.trim() &&
       form.category.trim() &&
       form.subcategory.trim() &&
         parseAmount(form.amount) > 0,
     );
-  }, [form, needsReceipt, receipt]);
+  }, [form, needsReceipt, preparedReceipt]);
 
   function updateField<Key extends keyof ExpenseForm>(key: Key, value: ExpenseForm[Key]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -339,6 +348,44 @@ function ExpenseApp({ user }: { user: User }) {
     setCategorySearch('');
   }
 
+  async function handleReceiptChange(nextFile: File | null) {
+    setStatus('idle');
+    setMessage('');
+    setEmailStatus('idle');
+    setEmailMessage('');
+    setReceiptError('');
+
+    if (!nextFile) {
+      setReceipt(null);
+      setPreparedReceipt(null);
+      setReceiptProcessing(false);
+      return;
+    }
+
+    if (!isSupportedReceiptFile(nextFile)) {
+      setReceipt(null);
+      setPreparedReceipt(null);
+      setReceiptProcessing(false);
+      setReceiptError('Podporované jsou pouze obrázky a PDF dokumenty.');
+      return;
+    }
+
+    setReceipt(nextFile);
+    setPreparedReceipt(null);
+    setReceiptProcessing(true);
+
+    try {
+      const normalizedReceipt = await prepareReceiptFile(nextFile);
+      setPreparedReceipt(normalizedReceipt);
+    } catch (error) {
+      setReceipt(null);
+      setPreparedReceipt(null);
+      setReceiptError(error instanceof Error ? error.message : 'Doklad se nepodařilo zpracovat.');
+    } finally {
+      setReceiptProcessing(false);
+    }
+  }
+
   async function submitExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit) return;
@@ -355,8 +402,8 @@ function ExpenseApp({ user }: { user: User }) {
 
       payload.append(key, value);
     });
-    if (receipt) {
-      payload.append('receipt', receipt);
+    if (preparedReceipt) {
+      payload.append('receipt', preparedReceipt);
     }
 
     try {
@@ -383,7 +430,7 @@ function ExpenseApp({ user }: { user: User }) {
   }
 
   async function sendExpenseEmail() {
-    if (!receipt || emailStatus === 'submitting') return;
+    if (!preparedReceipt || emailStatus === 'submitting') return;
 
     setEmailStatus('submitting');
     setEmailMessage('');
@@ -394,7 +441,7 @@ function ExpenseApp({ user }: { user: User }) {
     Object.entries(form).forEach(([key, value]) => {
       payload.append(key, key === 'amount' ? value.replace(',', '.') : value);
     });
-    payload.append('receipt', receipt);
+    payload.append('receipt', preparedReceipt);
 
     try {
       const token = await user.getIdToken();
@@ -624,7 +671,13 @@ function ExpenseApp({ user }: { user: User }) {
 
           </section>
 
-          <ReceiptPanel receipt={receipt} previewUrl={previewUrl} onReceiptChange={setReceipt} />
+          <ReceiptPanel
+            receipt={receipt}
+            previewUrl={previewUrl}
+            receiptError={receiptError}
+            receiptProcessing={receiptProcessing}
+            onReceiptChange={(file) => void handleReceiptChange(file)}
+          />
         </div>
 
         <div className="grid gap-3 min-[600px]:grid-cols-2 min-[1025px]:grid-cols-[auto_minmax(0,1fr)_auto] min-[1025px]:items-start">
@@ -668,7 +721,7 @@ function ExpenseApp({ user }: { user: User }) {
             <div className="contents min-[600px]:grid min-[600px]:gap-3 min-[1025px]:grid-cols-2">
               <button
                 className="order-2 w-full rounded-md border border-line bg-white px-4 py-2.5 font-bold text-ink transition hover:border-brand hover:text-brand disabled:cursor-not-allowed disabled:opacity-60 min-[600px]:order-none min-[1025px]:w-52"
-                disabled={!receipt}
+                disabled={!preparedReceipt || receiptProcessing}
                 onClick={() => {
                   setEmailSubject(buildDefaultEmailSubject(form.name));
                   setEmailBody(buildDefaultEmailBody(form.name, form.amount, selectedPaymentMethodLabel, formattedUser));
@@ -750,7 +803,7 @@ function ExpenseApp({ user }: { user: User }) {
               </button>
               <button
                 className="rounded-md bg-brand px-4 py-2.5 font-bold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={!receipt || emailStatus === 'submitting'}
+                disabled={!preparedReceipt || receiptProcessing || emailStatus === 'submitting'}
                 onClick={() => void sendExpenseEmail()}
                 type="button"
               >
@@ -767,17 +820,26 @@ function ExpenseApp({ user }: { user: User }) {
 function ReceiptPanel({
   receipt,
   previewUrl,
+  receiptError,
+  receiptProcessing,
   onReceiptChange,
 }: {
   receipt: File | null;
   previewUrl: string;
+  receiptError: string;
+  receiptProcessing: boolean;
   onReceiptChange: (file: File | null) => void;
 }) {
+  const previewType = getReceiptPreviewType(receipt);
+  const accept = getReceiptAcceptAttribute();
+
   return (
     <section className="flex min-w-0 flex-col rounded-lg border border-line bg-white p-3 shadow-panel sm:p-6">
       <div className="mb-5">
         <h2 className="text-xl font-bold text-ink">Doklad</h2>
-        <p className="mt-1 text-sm text-ink/65">Vyfoťte doklad na mobilu nebo nahrajte existující obrázek.</p>
+        <p className="mt-1 text-sm text-ink/65">
+          Vyfoťte doklad na mobilu nebo nahrajte existující obrázek či PDF. Obrázky se před uložením převedou na PDF.
+        </p>
       </div>
 
       <div className="grid min-w-0 gap-3 sm:grid-cols-2">
@@ -787,7 +849,7 @@ function ReceiptPanel({
           <input
             className="sr-only"
             type="file"
-            accept="image/*"
+            accept={accept}
             capture="environment"
             onChange={(event) => onReceiptChange(event.target.files?.[0] ?? null)}
           />
@@ -795,11 +857,11 @@ function ReceiptPanel({
 
         <label className="flex min-w-0 cursor-pointer items-center justify-center gap-2 rounded-md border border-line bg-white px-3 py-3 font-bold text-ink transition hover:border-brand hover:text-brand sm:px-4">
           <UploadIcon />
-          Nahrát obrázek
+          Nahrát soubor
           <input
             className="sr-only"
             type="file"
-            accept="image/*"
+            accept={accept}
             onChange={(event) => onReceiptChange(event.target.files?.[0] ?? null)}
           />
         </label>
@@ -807,11 +869,25 @@ function ReceiptPanel({
 
       <div className="mt-5 flex aspect-[7/5] min-h-56 items-center justify-center overflow-hidden rounded-md border border-dashed border-line bg-mist sm:min-h-80 lg:flex-1 lg:aspect-auto">
         {previewUrl ? (
-          <img className="h-full w-full object-contain" src={previewUrl} alt="Náhled účtenky" />
+          previewType === 'pdf' ? (
+            <iframe className="h-full w-full bg-white" src={previewUrl} title="Náhled PDF dokladu" />
+          ) : (
+            <img className="h-full w-full object-contain" src={previewUrl} alt="Náhled dokladu" />
+          )
         ) : (
-          <div className="px-6 text-center text-sm font-semibold text-ink/55">Není vybraná žádná účtenka</div>
+          <div className="px-6 text-center text-sm font-semibold text-ink/55">Není vybraný žádný doklad</div>
         )}
       </div>
+
+      {receiptProcessing ? (
+        <p className="mt-4 rounded-md bg-mist px-3 py-2 text-sm font-semibold text-ink/70">
+          Připravuji PDF verzi dokladu pro uložení do Google Drive.
+        </p>
+      ) : null}
+
+      {receiptError ? (
+        <p className="mt-4 rounded-md bg-coral/10 px-3 py-2 text-sm font-semibold text-red-700">{receiptError}</p>
+      ) : null}
 
       {receipt ? (
         <div className="mt-4 flex items-center justify-between gap-3 rounded-md bg-mist px-3 py-2">

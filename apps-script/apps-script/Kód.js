@@ -1,9 +1,9 @@
 const CONFIG = {
   sheetId: '1fisxKO42wsDBjQx-UZGiOhUqg9ZFYTBSW4IAk6nj-CY',
   sheetName: 'Expenses',
-  expensesSpreadsheetId: '1dMACC3Gyeor0Xv-mh0sN1y7sDOepLLiNeljMUqwdjWE',
-  driveFolderId: '1mwZucy4X0_FLU8xP6h8qYfvH8uadM001',
-  emailRecipient: 'martin.tavoda@gmail.com', // finance.brno@iaeste.cz
+  expensesSpreadsheetId: '1dMACC3Gyeor0Xv-mh0sN1y7sDOepLLiNeljMUqwdjWE', //dev: 1dMACC3Gyeor0Xv-mh0sN1y7sDOepLLiNeljMUqwdjWE, prod: 1GpLzU2RkzoDuTGyh2lxRA8h8xrbh0weJ1TILRWY9qCA
+  driveFolderId: '1mwZucy4X0_FLU8xP6h8qYfvH8uadM001', //dev: 1mwZucy4X0_FLU8xP6h8qYfvH8uadM001, prod: 1zwG1WNtUu0OLi-KYv98iz5y6NBgJl0R5
+  emailRecipient: 'martin.tavoda@iaeste.cz', // finance.brno@iaeste.cz
   senderAlias: 'it.brno@iaeste.cz',
   secret: 'CHANGE_THIS_TO_A_LONG_RANDOM_SECRET',
 };
@@ -40,7 +40,7 @@ function doPost(e) {
     if (receipt && receipt.base64) {
       const filename = buildReceiptFilename(expense, user, receipt.filename);
       const bytes = Utilities.base64Decode(receipt.base64);
-      const blob = Utilities.newBlob(bytes, receipt.mimeType || 'image/jpeg', filename);
+      const blob = Utilities.newBlob(bytes, getReceiptMimeType(receipt), filename);
       file = folder.createFile(blob);
     }
 
@@ -135,7 +135,7 @@ function sendExpenseEmail(payload) {
   const bytes = Utilities.base64Decode(receipt.base64);
   const attachment = Utilities.newBlob(
     bytes,
-    receipt.mimeType || 'image/jpeg',
+    getReceiptMimeType(receipt),
     buildReceiptFilename(expense, user, receipt.filename),
   );
   const aliases = GmailApp.getAliases();
@@ -235,7 +235,7 @@ function jsonResponse(payload) {
 }
 
 function buildReceiptFilename(expense, user, originalName) {
-  const extension = getExtension(originalName);
+  const extension = getReceiptExtension(originalName);
   const datePart = formatExpenseDateForFilename(expense.expenseDate);
   const namePart = sanitizeFilenamePart(expense.name, 'expense', 60);
   const amountPart = sanitizeAmountForFilename(expense.amount);
@@ -244,9 +244,18 @@ function buildReceiptFilename(expense, user, originalName) {
   return `${datePart}_${namePart}_${amountPart}_${surnamePart}${extension}`;
 }
 
-function getExtension(filename) {
+function getReceiptExtension(filename) {
   const match = String(filename || '').match(/\.[a-zA-Z0-9]+$/);
-  return match ? match[0].toLowerCase() : '.jpg';
+  return match ? match[0].toLowerCase() : '.pdf';
+}
+
+function getReceiptMimeType(receipt) {
+  const mimeType = String((receipt && receipt.mimeType) || '').toLowerCase();
+  if (mimeType) {
+    return mimeType;
+  }
+
+  return getReceiptExtension(receipt && receipt.filename) === '.pdf' ? 'application/pdf' : 'application/octet-stream';
 }
 
 function formatExpenseDateForFilename(value) {
