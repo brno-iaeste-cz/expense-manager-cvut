@@ -254,9 +254,12 @@ function ExpenseApp({ user }: { user: User }) {
   const selectedCategories = categoryTree[form.department as keyof typeof categoryTree] ?? [];
   const selectedCategory = selectedCategories.find((category) => category.value === form.category);
   const selectedSubcategories = selectedCategory?.subcategories ?? [];
+  const selectedDepartmentLabel = selectedDepartment?.label ?? form.department;
+  const selectedCategoryLabel = selectedCategory?.label ?? form.category;
+  const selectedSubcategoryLabel = form.subcategory;
   const categorySearchPlaceholder =
     selectedDepartment && selectedCategory && form.subcategory
-      ? `${selectedDepartment.label} / ${selectedCategory.label} / ${form.subcategory}`
+      ? `${selectedDepartmentLabel} / ${selectedCategoryLabel} / ${selectedSubcategoryLabel}`
       : 'Např. Prostory';
   const categorySearchResults = useMemo(() => {
     const query = normalizeText(categorySearch);
@@ -264,7 +267,7 @@ function ExpenseApp({ user }: { user: User }) {
 
     return categorySearchIndex
       .filter((item) =>
-        normalizeText(`${item.departmentLabel} ${item.categoryLabel} ${item.subcategory}`).includes(query),
+        normalizeText(`${item.departmentLabel} ${item.categoryLabel} ${item.subcategoryLabel}`).includes(query),
       )
       .slice(0, 6);
   }, [categorySearch]);
@@ -341,9 +344,9 @@ function ExpenseApp({ user }: { user: User }) {
   function applyCategorySearchResult(result: CategorySearchResult) {
     setForm((current) => ({
       ...current,
-      department: result.department,
-      category: result.category,
-      subcategory: result.subcategory,
+      department: result.departmentValue,
+      category: result.categoryValue,
+      subcategory: result.subcategoryValue,
     }));
     setCategorySearch('');
   }
@@ -561,10 +564,10 @@ function ExpenseApp({ user }: { user: User }) {
 
           <div className="mt-5 rounded-lg border border-line bg-mist/70 p-3 sm:p-4">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-              <h3 className="text-base font-bold text-ink">Zařazení výdaje</h3>
+                <h3 className="text-base font-bold text-ink">Zařazení výdaje</h3>
               <span className="max-w-full break-words rounded-md bg-white px-2.5 py-1 text-xs font-bold text-ink/65 sm:text-right">
                 {form.department && form.category && form.subcategory
-                  ? `${form.department} / ${form.category} / ${form.subcategory}`
+                  ? `${selectedDepartmentLabel} / ${selectedCategoryLabel} / ${selectedSubcategoryLabel}`
                   : 'Nevybráno'}
               </span>
             </div>
@@ -589,12 +592,12 @@ function ExpenseApp({ user }: { user: User }) {
                       {categorySearchResults.length > 0 ? (
                         categorySearchResults.map((result) => (
                           <button
-                            key={`${result.department}-${result.category}-${result.subcategory}`}
+                            key={`${result.departmentValue}-${result.categoryValue}-${result.subcategoryValue}`}
                             className="block w-full px-3 py-3 text-left text-sm hover:bg-mist focus:bg-mist focus:outline-none"
                             onClick={() => applyCategorySearchResult(result)}
                             type="button"
                           >
-                            <span className="block font-bold text-ink">{result.subcategory}</span>
+                            <span className="block font-bold text-ink">{result.subcategoryLabel}</span>
                             <span className="block text-ink/65">
                               {result.departmentLabel} / {result.categoryLabel}
                             </span>

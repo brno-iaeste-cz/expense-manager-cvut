@@ -10,11 +10,12 @@ export type Department = {
 };
 
 export type CategorySearchResult = {
-  department: string;
+  departmentValue: string;
   departmentLabel: string;
-  category: string;
+  categoryValue: string;
   categoryLabel: string;
-  subcategory: string;
+  subcategoryValue: string;
+  subcategoryLabel: string;
 };
 
 export const categoryTree = {
@@ -122,7 +123,7 @@ export const categoryTree = {
   ],
   Akce: [
     {
-      value: 'Mezinárodní akce',
+      value: 'Konference: 1 eur =',
       label: 'Mezinárodní akce',
       subcategories: [
         'CEC podzim',
@@ -159,8 +160,8 @@ export const categoryTree = {
       ]
     },
     {
-      value: 'Ostatné projekty',
-      label: 'Ostatné projekty',
+      value: 'Projekty',
+      label: 'Projekty',
       subcategories: [
         'Diář',
         'BigStep',
@@ -225,11 +226,12 @@ export const categorySearchIndex: CategorySearchResult[] = Object.entries(catego
 
     return categories.flatMap((category) =>
       category.subcategories.map((subcategory) => ({
-        department,
+        departmentValue: department,
         departmentLabel,
-        category: category.value,
+        categoryValue: category.value,
         categoryLabel: category.label,
-        subcategory,
+        subcategoryValue: subcategory,
+        subcategoryLabel: subcategory,
       })),
     );
   },

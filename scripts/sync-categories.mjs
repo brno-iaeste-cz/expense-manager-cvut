@@ -1,15 +1,15 @@
 import { writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { inflateRawSync } from 'node:zlib';
+import { readDevVars } from './dev-vars.mjs';
 
-const DEFAULT_SPREADSHEET_ID = '1dMACC3Gyeor0Xv-mh0sN1y7sDOepLLiNeljMUqwdjWE';
-const DEFAULT_DEPARTMENT_SHEETS = ['PR', 'HR', 'EX', 'Akce', 'Projekty', 'Cesťák'];
-const spreadsheetId = process.env.EXPENSES_SPREADSHEET_ID ?? DEFAULT_SPREADSHEET_ID;
+const DEFAULT_DEPARTMENT_SHEETS = ['PR', 'HR', 'EX', 'Akce', 'Projekty', 'Ces\u0165\u00e1k'];
+const devVars = loadDevVars();
 const departmentSheets = (process.env.CATEGORIES_DEPARTMENT_SHEETS ?? DEFAULT_DEPARTMENT_SHEETS.join(','))
   .split(',')
   .map((sheet) => sheet.trim())
   .filter(Boolean);
 const optional = process.argv.includes('--optional');
+const spreadsheetId = readSpreadsheetIdArg(process.argv.slice(2));
 
 try {
   await main();
@@ -22,21 +22,11 @@ try {
 }
 
 async function main() {
-  const categoryTree = {};
-  const workbook = await fetchWorkbook(spreadsheetId);
-
-  for (const sheet of departmentSheets) {
-    const rows = workbook.sheets.get(sheet);
-    if (!rows) {
-      continue;
-    }
-
-    const categories = extractCategories(rows);
-
-    if (categories.length > 0) {
-      categoryTree[sheet] = categories;
-    }
+  if (!spreadsheetId) {
+    throw new Error('Missing spreadsheet ID. Use: npm run categories:sync -- <spreadsheetId>');
   }
+
+  const categoryTree = await fetchCategoryTree();
 
   await writeFile(resolve('src/categories.ts'), renderCategoriesFile(categoryTree), 'utf8');
 
@@ -51,179 +41,37 @@ async function main() {
   );
 }
 
-async function fetchWorkbook(id) {
-  const url = new URL(`https://docs.google.com/spreadsheets/d/${id}/export`);
-  url.searchParams.set('format', 'xlsx');
+async function fetchCategoryTree() {
+  const appScriptUrl = process.env.APPS_SCRIPT_WEB_APP_URL ?? devVars.APPS_SCRIPT_WEB_APP_URL;
+  const appScriptSecret = process.env.APPS_SCRIPT_SECRET ?? devVars.APPS_SCRIPT_SECRET;
 
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch spreadsheet: ${response.status} ${response.statusText}`);
+  if (!appScriptUrl || !appScriptSecret) {
+    throw new Error('Missing Apps Script configuration. Set APPS_SCRIPT_WEB_APP_URL and APPS_SCRIPT_SECRET in .dev.vars.');
   }
 
-  const entries = readZipEntries(Buffer.from(await response.arrayBuffer()));
-  const sharedStrings = parseSharedStrings(entries.get('xl/sharedStrings.xml') ?? '');
-  const sheetNames = parseSheetNames(entries.get('xl/workbook.xml') ?? '');
-  const sheets = new Map();
-
-  sheetNames.forEach((sheet, index) => {
-    const xml = entries.get(`xl/worksheets/sheet${index + 1}.xml`);
-    if (xml) {
-      sheets.set(sheet, parseWorksheet(xml, sharedStrings));
-    }
+  const response = await fetch(appScriptUrl, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      action: 'getCategories',
+      secret: appScriptSecret,
+      spreadsheetId,
+      departments: departmentSheets,
+    }),
   });
 
-  return { sheets };
-}
-
-function extractCategories(rows) {
-  const headerRow = rows[0] ?? [];
-  const typeRow = rows[1] ?? [];
-  const categories = [];
-
-  for (let column = 0; column < typeRow.length; column += 1) {
-    if (typeRow[column] !== 'Výdaje' || !headerRow[column]) {
-      continue;
-    }
-
-    const category = headerRow[column];
-    const subcategories = [];
-
-    for (let row = 3; row < rows.length; row += 1) {
-      const value = rows[row]?.[column]?.trim() ?? '';
-
-      if (value === 'Cena') {
-        break;
-      }
-
-      if (value && value !== 'Odvětví') {
-        subcategories.push(value);
-      }
-    }
-
-    categories.push({
-      value: category,
-      label: category,
-      subcategories: unique(subcategories),
-    });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch categories from Apps Script: ${response.status} ${response.statusText}`);
   }
 
-  return categories;
-}
-
-function readZipEntries(buffer) {
-  const entries = new Map();
-  const endOffset = findEndOfCentralDirectory(buffer);
-  const centralDirectorySize = buffer.readUInt32LE(endOffset + 12);
-  const centralDirectoryOffset = buffer.readUInt32LE(endOffset + 16);
-  let offset = centralDirectoryOffset;
-  const end = centralDirectoryOffset + centralDirectorySize;
-
-  while (offset < end) {
-    if (buffer.readUInt32LE(offset) !== 0x02014b50) {
-      throw new Error('Invalid XLSX central directory.');
-    }
-
-    const compressionMethod = buffer.readUInt16LE(offset + 10);
-    const compressedSize = buffer.readUInt32LE(offset + 20);
-    const fileNameLength = buffer.readUInt16LE(offset + 28);
-    const extraFieldLength = buffer.readUInt16LE(offset + 30);
-    const fileCommentLength = buffer.readUInt16LE(offset + 32);
-    const localHeaderOffset = buffer.readUInt32LE(offset + 42);
-    const fileName = buffer.toString('utf8', offset + 46, offset + 46 + fileNameLength);
-
-    const localFileNameLength = buffer.readUInt16LE(localHeaderOffset + 26);
-    const localExtraFieldLength = buffer.readUInt16LE(localHeaderOffset + 28);
-    const dataStart = localHeaderOffset + 30 + localFileNameLength + localExtraFieldLength;
-    const compressedData = buffer.subarray(dataStart, dataStart + compressedSize);
-
-    if (compressionMethod === 0) {
-      entries.set(fileName, compressedData.toString('utf8'));
-    } else if (compressionMethod === 8) {
-      entries.set(fileName, inflateRawSync(compressedData).toString('utf8'));
-    }
-
-    offset += 46 + fileNameLength + extraFieldLength + fileCommentLength;
+  const payload = await response.json();
+  if (!payload?.ok || typeof payload.categoryTree !== 'object' || payload.categoryTree === null) {
+    throw new Error(payload?.error || 'Apps Script returned an invalid categories payload.');
   }
 
-  return entries;
-}
-
-function findEndOfCentralDirectory(buffer) {
-  for (let offset = buffer.length - 22; offset >= 0; offset -= 1) {
-    if (buffer.readUInt32LE(offset) === 0x06054b50) {
-      return offset;
-    }
-  }
-
-  throw new Error('Invalid XLSX file.');
-}
-
-function parseSharedStrings(xml) {
-  return [...xml.matchAll(/<si>([\s\S]*?)<\/si>/g)].map((match) =>
-    [...match[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((textMatch) => decodeXml(textMatch[1])).join(''),
-  );
-}
-
-function parseSheetNames(xml) {
-  return [...xml.matchAll(/<sheet\b[^>]*\bname="([^"]+)"/g)].map((match) => decodeXml(match[1]));
-}
-
-function parseWorksheet(xml, sharedStrings) {
-  const rows = [];
-
-  for (const rowMatch of xml.matchAll(/<row\b[^>]*\br="(\d+)"[^>]*>([\s\S]*?)<\/row>/g)) {
-    const rowIndex = Number(rowMatch[1]) - 1;
-    rows[rowIndex] ??= [];
-
-    for (const cellMatch of rowMatch[2].matchAll(/<c\b([^>]*)\/>|<c\b([^>]*)>([\s\S]*?)<\/c>/g)) {
-      const attributes = cellMatch[1] ?? cellMatch[2];
-      const body = cellMatch[3] ?? '';
-      const cellReference = attributes.match(/\br="([A-Z]+\d+)"/)?.[1];
-      if (!cellReference) {
-        continue;
-      }
-
-      const columnIndex = columnNameToIndex(cellReference.match(/^[A-Z]+/)?.[0] ?? 'A');
-      const type = attributes.match(/\bt="([^"]+)"/)?.[1];
-      const valueMatch = body.match(/<v>([\s\S]*?)<\/v>/);
-      let value = '';
-
-      if (type === 's' && valueMatch) {
-        value = sharedStrings[Number(valueMatch[1])] ?? '';
-      } else if (type === 'inlineStr') {
-        value = [...body.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((match) => decodeXml(match[1])).join('');
-      } else if (valueMatch) {
-        value = decodeXml(valueMatch[1]);
-      }
-
-      rows[rowIndex][columnIndex] = value;
-    }
-  }
-
-  return rows;
-}
-
-function columnNameToIndex(columnName) {
-  let index = 0;
-
-  for (const character of columnName) {
-    index = index * 26 + character.charCodeAt(0) - 64;
-  }
-
-  return index - 1;
-}
-
-function decodeXml(value) {
-  return value
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&');
-}
-
-function unique(values) {
-  return [...new Set(values)];
+  return payload.categoryTree;
 }
 
 function renderCategoriesFile(tree) {
@@ -244,11 +92,12 @@ export type Department = {
 };
 
 export type CategorySearchResult = {
-  department: string;
+  departmentValue: string;
   departmentLabel: string;
-  category: string;
+  categoryValue: string;
   categoryLabel: string;
-  subcategory: string;
+  subcategoryValue: string;
+  subcategoryLabel: string;
 };
 
 export const categoryTree = ${formatValue(tree)} satisfies Record<string, Category[]>;
@@ -261,11 +110,12 @@ export const categorySearchIndex: CategorySearchResult[] = Object.entries(catego
 
     return categories.flatMap((category) =>
       category.subcategories.map((subcategory) => ({
-        department,
+        departmentValue: department,
         departmentLabel,
-        category: category.value,
+        categoryValue: category.value,
         categoryLabel: category.label,
-        subcategory,
+        subcategoryValue: subcategory,
+        subcategoryLabel: subcategory,
       })),
     );
   },
@@ -277,4 +127,40 @@ function formatValue(value) {
   return JSON.stringify(value, null, 2)
     .replace(/"([^"]+)":/g, '$1:')
     .replace(/"/g, "'");
+}
+
+function loadDevVars() {
+  try {
+    return readDevVars();
+  } catch {
+    return {};
+  }
+}
+
+function readSpreadsheetIdArg(argv) {
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+
+    if (!arg || arg === '--optional') {
+      continue;
+    }
+
+    if (arg === '--spreadsheet-id' || arg === '--sheet-id') {
+      return argv[index + 1] || '';
+    }
+
+    if (arg.startsWith('--spreadsheet-id=')) {
+      return arg.slice('--spreadsheet-id='.length);
+    }
+
+    if (arg.startsWith('--sheet-id=')) {
+      return arg.slice('--sheet-id='.length);
+    }
+
+    if (!arg.startsWith('--')) {
+      return arg;
+    }
+  }
+
+  return '';
 }

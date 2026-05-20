@@ -159,14 +159,16 @@ Expense departments, categories, and subcategories are generated into `src/categ
 Run a manual sync when the budgeting spreadsheet categories change:
 
 ```bash
-npm run categories:sync
+npm run categories:sync -- <spreadsheetId>
 ```
 
-The default source spreadsheet is:
+Example:
 
-```text
-https://docs.google.com/spreadsheets/d/1dMACC3Gyeor0Xv-mh0sN1y7sDOepLLiNeljMUqwdjWE/edit
+```bash
+npm run categories:sync -- 1dMACC3Gyeor0Xv-mh0sN1y7sDOepLLiNeljMUqwdjWE
 ```
+
+The spreadsheet must be accessible to the Google account that owns the deployed Apps Script web app. The local machine does not need direct access to the sheet.
 
 The sync reads these sheet tabs:
 
@@ -176,17 +178,36 @@ PR, HR, EX, Akce, Projekty, Cesťák
 
 Only tabs that contain category blocks are written to `src/categories.ts`. A category block is detected by a `Výdaje` cell in the second row. The category name is read from the first row of that same column, and subcategories are read from the same column under `Odvětví` until `Cena`.
 
-`npm run build` does not sync categories automatically. If you need fresh categories, run `npm run categories:sync` manually before `npm run build`. If you skip the manual sync, the build uses the current checked-in `src/categories.ts`.
+`npm run build` does not sync categories automatically. If you need fresh categories, run `npm run categories:sync -- <spreadsheetId>` manually before `npm run build`. If you skip the manual sync, the build uses the current checked-in `src/categories.ts`.
 
-To use a different spreadsheet or tab list:
+To use a different tab list:
 
 ```powershell
-$env:EXPENSES_SPREADSHEET_ID="..."
 $env:CATEGORIES_DEPARTMENT_SHEETS="PR,HR,EX,Akce,Projekty"
-npm run categories:sync
+npm run categories:sync -- <spreadsheetId>
 ```
 
-The spreadsheet must be readable by the machine running the command.
+`src/categories.ts` uses a stable contract for categories:
+
+- `value` is the raw category name used for sheet lookup and API submission.
+- `label` is the display name shown in the UI.
+
+If one category should be displayed differently than it is named in the sheet, edit the generated entry in `src/categories.ts` and change only `label`. Keep `value` equal to the exact sheet category name.
+
+Example:
+
+```ts
+{
+  value: 'Mezinárodní akce',
+  label: 'Konference: 1 eur =',
+  subcategories: [...]
+}
+```
+
+The same rule applies in the generated search index:
+
+- `categoryValue` is used to write back to the form and later to the sheet lookup.
+- `categoryLabel` is used for visible text in the app.
 
 ## Cloudflare Pages
 

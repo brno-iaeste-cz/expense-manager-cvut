@@ -1,12 +1,24 @@
-const CONFIG = {
+const PROD_CONFIG = {
   sheetId: '1fisxKO42wsDBjQx-UZGiOhUqg9ZFYTBSW4IAk6nj-CY',
   sheetName: 'Expenses',
-  expensesSpreadsheetId: '1dMACC3Gyeor0Xv-mh0sN1y7sDOepLLiNeljMUqwdjWE', //dev: 1dMACC3Gyeor0Xv-mh0sN1y7sDOepLLiNeljMUqwdjWE, prod: 1GpLzU2RkzoDuTGyh2lxRA8h8xrbh0weJ1TILRWY9qCA
-  driveFolderId: '1mwZucy4X0_FLU8xP6h8qYfvH8uadM001', //dev: 1mwZucy4X0_FLU8xP6h8qYfvH8uadM001, prod: 1zwG1WNtUu0OLi-KYv98iz5y6NBgJl0R5
-  emailRecipient: 'martin.tavoda@iaeste.cz', // finance.brno@iaeste.cz
+  expensesSpreadsheetId: '1GpLzU2RkzoDuTGyh2lxRA8h8xrbh0weJ1TILRWY9qCA', //dev: 1dMACC3Gyeor0Xv-mh0sN1y7sDOepLLiNeljMUqwdjWE, prod: 1GpLzU2RkzoDuTGyh2lxRA8h8xrbh0weJ1TILRWY9qCA
+  driveFolderId: '1zwG1WNtUu0OLi-KYv98iz5y6NBgJl0R5', //dev: 1mwZucy4X0_FLU8xP6h8qYfvH8uadM001, prod: 1zwG1WNtUu0OLi-KYv98iz5y6NBgJl0R5
+  emailRecipient: 'finance.brno@iaeste.cz', // finance.brno@iaeste.cz
   senderAlias: 'it.brno@iaeste.cz',
   secret: 'CHANGE_THIS_TO_A_LONG_RANDOM_SECRET',
 };
+
+const DEV_CONFIG = {
+  sheetId: '1fisxKO42wsDBjQx-UZGiOhUqg9ZFYTBSW4IAk6nj-CY',
+  sheetName: 'Expenses',
+  expensesSpreadsheetId: '1dMACC3Gyeor0Xv-mh0sN1y7sDOepLLiNeljMUqwdjWE',
+  driveFolderId: '1mwZucy4X0_FLU8xP6h8qYfvH8uadM001',
+  emailRecipient: 'martin.tavoda@iaeste.cz',
+  senderAlias: 'it.brno@iaeste.cz',
+  secret: 'CHANGE_THIS_TO_A_LONG_RANDOM_SECRET',
+};
+
+const CONFIG = DEV_CONFIG; 
 
 function doPost(e) {
   try {
@@ -14,6 +26,10 @@ function doPost(e) {
 
     if (payload.secret !== CONFIG.secret) {
       return jsonResponse({ ok: false, error: 'Unauthorized.' }, 401);
+    }
+
+    if (payload.action === 'getCategories') {
+      return getCategories(payload);
     }
 
     if (payload.action === 'sendExpenseEmail') {
@@ -153,8 +169,72 @@ function sendExpenseEmail(payload) {
   return jsonResponse({ ok: true });
 }
 
+function getCategories(payload) {
+  const spreadsheetId = String(payload.spreadsheetId || '').trim();
+  if (!spreadsheetId) {
+    return jsonResponse({ ok: false, error: 'Spreadsheet ID is required.' }, 400);
+  }
+
+  const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+  const requestedDepartments = Array.isArray(payload.departments) ? payload.departments : [];
+  const departments = requestedDepartments.length > 0
+    ? requestedDepartments
+    : spreadsheet.getSheets().map((sheet) => sheet.getName());
+  const categoryTree = {};
+
+  departments.forEach((department) => {
+    const sheet = spreadsheet.getSheetByName(department);
+    if (!sheet) {
+      return;
+    }
+
+    const rows = sheet.getDataRange().getDisplayValues();
+    const categories = extractCategories(rows);
+    if (categories.length > 0) {
+      categoryTree[department] = categories;
+    }
+  });
+
+  return jsonResponse({ ok: true, categoryTree: categoryTree });
+}
+
 function authorizeMailPermission() {
   GmailApp.getAliases();
+}
+
+function extractCategories(rows) {
+  const headerRow = rows[0] || [];
+  const typeRow = rows[1] || [];
+  const categories = [];
+
+  for (let column = 0; column < typeRow.length; column += 1) {
+    if (String(typeRow[column] || '').trim() !== 'Výdaje' || !headerRow[column]) {
+      continue;
+    }
+
+    const category = String(headerRow[column] || '').trim();
+    const subcategories = [];
+
+    for (let row = 3; row < rows.length; row += 1) {
+      const value = String((rows[row] && rows[row][column]) || '').trim();
+
+      if (value === 'Cena') {
+        break;
+      }
+
+      if (value && value !== 'Odvětví') {
+        subcategories.push(value);
+      }
+    }
+
+    categories.push({
+      value: category,
+      label: category,
+      subcategories: unique(subcategories),
+    });
+  }
+
+  return categories;
 }
 
 function getExpensesSpreadsheetId() {
@@ -295,4 +375,20 @@ function getUserSurname(user) {
   }
 
   return String(user.email || '').split('@')[0] || 'unknown';
+}
+
+function unique(values) {
+  const seen = {};
+  const result = [];
+
+  values.forEach((value) => {
+    if (seen[value]) {
+      return;
+    }
+
+    seen[value] = true;
+    result.push(value);
+  });
+
+  return result;
 }
