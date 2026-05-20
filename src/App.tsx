@@ -628,26 +628,21 @@ function ExpenseApp({ user }: { user: User }) {
         </div>
 
         <div className="grid gap-3 min-[600px]:grid-cols-2 min-[1025px]:grid-cols-[auto_minmax(0,1fr)_auto] min-[1025px]:items-start">
+          {status === 'success' ? (
+            <p className="rounded-md px-3 pb-3 text-center text-xl font-extrabold text-red-700 min-[600px]:col-span-2 min-[1025px]:col-span-3 min-[1025px]:text-2xl">
+              Fyzickou účtenku uschovejte do složky v kanceláři!
+            </p>
+          ) : null}
+
           {message ? (
-            <>
+            <div className="flex justify-center min-[600px]:col-span-2 min-[1025px]:col-span-3">
               <p
-                className={`rounded-md px-3 py-2 text-center text-sm font-semibold min-[600px]:col-span-2 min-[1025px]:hidden ${status === 'success' ? 'bg-green-100 text-green-800' : 'bg-coral/10 text-red-700'
+                className={`w-fit rounded-md px-3 py-2 text-center text-sm font-semibold ${status === 'success' ? 'bg-green-100 text-green-800' : 'bg-coral/10 text-red-700'
                   }`}
               >
                 {message}
               </p>
-              {status === 'success' ? (
-                <p className="rounded-md px-3 text-center text-xl font-extrabold text-red-700 min-[600px]:col-span-2 min-[1025px]:hidden">
-                  Fyzickou účtenku uschovejte do složky v kanceláři!
-                </p>
-              ) : null}
-            </>
-          ) : null}
-
-          {status === 'success' ? (
-            <p className="hidden rounded-md px-3 pb-3 text-center text-2xl font-extrabold text-red-700 min-[1025px]:col-span-3 min-[1025px]:block">
-              Fyzickou účtenku uschovejte do složky v kanceláři!
-            </p>
+            </div>
           ) : null}
 
           <div className="contents min-[600px]:grid min-[600px]:gap-3 min-[1025px]:grid-cols-2">
@@ -693,17 +688,6 @@ function ExpenseApp({ user }: { user: User }) {
                 {status === 'submitting' ? 'Ukládám...' : 'Uložit výdaj'}
               </button>
             </div>
-
-            {message ? (
-              <>
-                <p
-                  className={`hidden rounded-md px-3 py-2 text-sm font-semibold min-[1025px]:block ${status === 'success' ? 'bg-green-100 text-green-800' : 'bg-coral/10 text-red-700'
-                    }`}
-                >
-                  {message}
-                </p>
-              </>
-            ) : null}
           </div>
         </div>
       </form>
