@@ -1,7 +1,7 @@
 const PROD_CONFIG = {
   sheetId: '1fisxKO42wsDBjQx-UZGiOhUqg9ZFYTBSW4IAk6nj-CY',
   sheetName: 'Expenses',
-  expensesSpreadsheetId: '1GpLzU2RkzoDuTGyh2lxRA8h8xrbh0weJ1TILRWY9qCA', //dev: 1dMACC3Gyeor0Xv-mh0sN1y7sDOepLLiNeljMUqwdjWE, prod: 1GpLzU2RkzoDuTGyh2lxRA8h8xrbh0weJ1TILRWY9qCA
+  expensesSpreadsheetId: '19OArVP93kWrWzlRVVwrHteuh0Em6ekh9FyigkEd7Y68', //dev: 1dMACC3Gyeor0Xv-mh0sN1y7sDOepLLiNeljMUqwdjWE, prod: 19OArVP93kWrWzlRVVwrHteuh0Em6ekh9FyigkEd7Y68
   driveFolderId: '1zwG1WNtUu0OLi-KYv98iz5y6NBgJl0R5', //dev: 1mwZucy4X0_FLU8xP6h8qYfvH8uadM001, prod: 1zwG1WNtUu0OLi-KYv98iz5y6NBgJl0R5
   emailRecipient: 'finance.brno@iaeste.cz', // finance.brno@iaeste.cz
   senderAlias: 'it.brno@iaeste.cz',
@@ -18,7 +18,7 @@ const DEV_CONFIG = {
   secret: 'CHANGE_THIS_TO_A_LONG_RANDOM_SECRET',
 };
 
-const CONFIG = DEV_CONFIG; 
+const CONFIG = PROD_CONFIG; 
 
 function doPost(e) {
   try {

@@ -114,8 +114,8 @@ cd apps-script
 clasp login
 clasp push
 clasp create-version "versionName"
-clasp create-deployment -V <version> -d "Development version" -i AKfycbxglT-AJP83Vv7hzP0ehoU9oJNyjU2AKhb9VY9m2qAj0CvQRSO0DOUKausZ59FBdB0I
-clasp create-deployment -V <version> -d "Production version" -i AKfycbyB-hopUcS7vQ72kAJ0Acr0TEtjLDHo2YxTDZOMoRxC73takFGnBO3sMyEh_h5ObOH6
+clasp create-deployment -V <version> -d "Development deployment" -i AKfycbxglT-AJP83Vv7hzP0ehoU9oJNyjU2AKhb9VY9m2qAj0CvQRSO0DOUKausZ59FBdB0I
+clasp create-deployment -V <version> -d "Production deployment" -i AKfycbyB-hopUcS7vQ72kAJ0Acr0TEtjLDHo2YxTDZOMoRxC73takFGnBO3sMyEh_h5ObOH6
 ```
 
 Useful inspection commands:
