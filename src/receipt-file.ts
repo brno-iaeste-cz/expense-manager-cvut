@@ -3,6 +3,13 @@ const JPEG_MIME_TYPE = 'image/jpeg';
 const PDF_EXTENSION = '.pdf';
 const PX_TO_PT = 72 / 96;
 
+type LoadedImage = {
+  element: HTMLImageElement;
+  width: number;
+  height: number;
+  jpegBytes: Uint8Array;
+};
+
 export function isPdfFile(file: File) {
   return getNormalizedMimeType(file) === PDF_MIME_TYPE || hasExtension(file.name, PDF_EXTENSION);
 }
@@ -12,12 +19,27 @@ export function isSupportedReceiptFile(file: File) {
   return isPdfFile(file) || mimeType.startsWith('image/');
 }
 
-export async function prepareReceiptFile(file: File) {
-  if (isPdfFile(file)) {
-    return file;
+export async function prepareReceiptFiles(files: File[]) {
+  if (files.length === 0) {
+    return null;
   }
 
-  return convertImageFileToPdf(file);
+  if (files.length === 1 && isPdfFile(files[0])) {
+    return files[0];
+  }
+
+  if (files.some(isPdfFile)) {
+    throw new Error('Pri nahrani vice souboru pouzijte pouze obrazky. PDF lze nahrat jen samostatne.');
+  }
+
+  const images = await Promise.all(files.map(loadImage));
+  const pdfBytes = buildImagesPdf(images);
+  const pdfName = buildReceiptPdfName(files);
+
+  return new File([pdfBytes], pdfName, {
+    type: PDF_MIME_TYPE,
+    lastModified: Date.now(),
+  });
 }
 
 export function getReceiptAcceptAttribute() {
@@ -29,15 +51,15 @@ export function getReceiptPreviewType(file: File | null) {
   return isPdfFile(file) ? 'pdf' : 'image';
 }
 
-async function convertImageFileToPdf(file: File) {
-  const image = await loadImage(file);
+async function loadImage(file: File): Promise<LoadedImage> {
+  const image = await loadImageElement(file);
   const canvas = document.createElement('canvas');
   canvas.width = image.width;
   canvas.height = image.height;
 
   const context = canvas.getContext('2d');
   if (!context) {
-    throw new Error('Pro převod obrázku do PDF se nepodařilo připravit canvas.');
+    throw new Error('Pro prevod obrazku do PDF se nepodarilo pripravit canvas.');
   }
 
   context.fillStyle = '#ffffff';
@@ -46,16 +68,14 @@ async function convertImageFileToPdf(file: File) {
 
   const jpegBlob = await canvasToBlob(canvas, JPEG_MIME_TYPE, 0.92);
   const jpegBytes = new Uint8Array(await jpegBlob.arrayBuffer());
-  const pdfBytes = buildSingleImagePdf(jpegBytes, image.width, image.height);
-  const pdfName = replaceExtension(file.name, PDF_EXTENSION);
 
-  return new File([pdfBytes], pdfName, {
-    type: PDF_MIME_TYPE,
-    lastModified: Date.now(),
-  });
+  return {
+    ...image,
+    jpegBytes,
+  };
 }
 
-function loadImage(file: File) {
+function loadImageElement(file: File) {
   return new Promise<{ element: HTMLImageElement; width: number; height: number }>((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const image = new Image();
@@ -69,7 +89,7 @@ function loadImage(file: File) {
 
     image.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error('Vybraný obrázek se nepodařilo načíst. Zkuste JPG, PNG nebo PDF.'));
+      reject(new Error('Vybrany obrazek se nepodarilo nacist. Zkuste JPG, PNG nebo PDF.'));
     };
 
     image.src = url;
@@ -80,7 +100,7 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality?: number)
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (!blob) {
-        reject(new Error('Obrázek se nepodařilo převést do PDF.'));
+        reject(new Error('Obrazek se nepodarilo prevest do PDF.'));
         return;
       }
 
@@ -89,38 +109,57 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality?: number)
   });
 }
 
-function buildSingleImagePdf(jpegBytes: Uint8Array, imageWidthPx: number, imageHeightPx: number) {
+function buildImagesPdf(images: LoadedImage[]) {
   const encoder = new TextEncoder();
-  const imageWidthPt = roundPdfNumber(imageWidthPx * PX_TO_PT);
-  const imageHeightPt = roundPdfNumber(imageHeightPx * PX_TO_PT);
-  const imageStream = `4 0 obj
-<< /Type /XObject /Subtype /Image /Width ${imageWidthPx} /Height ${imageHeightPx} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>
-stream
-`;
-  const imageStreamSuffix = `
-endstream
-endobj
-`;
-  const pageContent = `q
-${imageWidthPt} 0 0 ${imageHeightPt} 0 0 cm
-/Im0 Do
-Q
-`;
-  const objects = [
-    '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
-    '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n',
-    `3 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${imageWidthPt} ${imageHeightPt}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>
-endobj
-`,
-    null,
-    `5 0 obj
-<< /Length ${encoder.encode(pageContent).length} >>
-stream
-${pageContent}endstream
-endobj
-`,
-  ] as const;
+  const objectCount = 2 + images.length * 3;
+  const objects: Uint8Array[] = [];
+  const pageObjectIds: number[] = [];
+  const imageObjectIds: number[] = [];
+  const contentObjectIds: number[] = [];
+
+  let nextObjectId = 3;
+  for (let index = 0; index < images.length; index += 1) {
+    pageObjectIds.push(nextObjectId);
+    imageObjectIds.push(nextObjectId + 1);
+    contentObjectIds.push(nextObjectId + 2);
+    nextObjectId += 3;
+  }
+
+  objects.push(encoder.encode('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n'));
+
+  const kids = pageObjectIds.map((id) => `${id} 0 R`).join(' ');
+  objects.push(
+    encoder.encode(`2 0 obj\n<< /Type /Pages /Kids [${kids}] /Count ${images.length} >>\nendobj\n`),
+  );
+
+  for (let index = 0; index < images.length; index += 1) {
+    const image = images[index];
+    const pageObjectId = pageObjectIds[index];
+    const imageObjectId = imageObjectIds[index];
+    const contentObjectId = contentObjectIds[index];
+    const imageWidthPt = roundPdfNumber(image.width * PX_TO_PT);
+    const imageHeightPt = roundPdfNumber(image.height * PX_TO_PT);
+    const pageContent = `q\n${imageWidthPt} 0 0 ${imageHeightPt} 0 0 cm\n/Im0 Do\nQ\n`;
+
+    objects.push(
+      encoder.encode(
+        `${pageObjectId} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${imageWidthPt} ${imageHeightPt}] /Resources << /XObject << /Im0 ${imageObjectId} 0 R >> >> /Contents ${contentObjectId} 0 R >>\nendobj\n`,
+      ),
+    );
+
+    const imagePrefix = encoder.encode(
+      `${imageObjectId} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${image.width} /Height ${image.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${image.jpegBytes.length} >>\nstream\n`,
+    );
+    const imageSuffix = encoder.encode('\nendstream\nendobj\n');
+    objects.push(joinUint8Arrays([imagePrefix, image.jpegBytes, imageSuffix]));
+
+    const contentBytes = encoder.encode(pageContent);
+    objects.push(
+      encoder.encode(
+        `${contentObjectId} 0 obj\n<< /Length ${contentBytes.length} >>\nstream\n${pageContent}endstream\nendobj\n`,
+      ),
+    );
+  }
 
   const parts: Uint8Array[] = [encoder.encode('%PDF-1.4\n')];
   const offsets: number[] = [0];
@@ -128,34 +167,20 @@ endobj
 
   for (const object of objects) {
     offsets.push(byteLength);
-
-    if (object === null) {
-      const prefix = encoder.encode(imageStream);
-      const suffix = encoder.encode(imageStreamSuffix);
-      parts.push(prefix, jpegBytes, suffix);
-      byteLength += prefix.length + jpegBytes.length + suffix.length;
-      continue;
-    }
-
-    const encoded = encoder.encode(object);
-    parts.push(encoded);
-    byteLength += encoded.length;
+    parts.push(object);
+    byteLength += object.length;
   }
 
   const xrefOffset = byteLength;
-  const xrefLines = ['xref', `0 ${offsets.length}`, '0000000000 65535 f '];
-  for (let index = 1; index < offsets.length; index += 1) {
+  const xrefLines = ['xref', `0 ${objectCount + 1}`, '0000000000 65535 f '];
+
+  for (let index = 1; index <= objectCount; index += 1) {
     xrefLines.push(`${String(offsets[index]).padStart(10, '0')} 00000 n `);
   }
 
-  const trailer = `trailer
-<< /Size ${offsets.length} /Root 1 0 R >>
-startxref
-${xrefOffset}
-%%EOF
-`;
-
+  const trailer = `trailer\n<< /Size ${objectCount + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
   parts.push(encoder.encode(`${xrefLines.join('\n')}\n${trailer}`));
+
   return joinUint8Arrays(parts);
 }
 
@@ -172,9 +197,10 @@ function joinUint8Arrays(chunks: Uint8Array[]) {
   return joined;
 }
 
-function replaceExtension(filename: string, extension: string) {
-  const baseName = String(filename || 'receipt').replace(/\.[^.]+$/, '');
-  return `${baseName}${extension}`;
+function buildReceiptPdfName(files: File[]) {
+  const firstFile = files[0];
+  const baseName = String(firstFile?.name || 'receipt').replace(/\.[^.]+$/, '');
+  return files.length === 1 ? `${baseName}${PDF_EXTENSION}` : `${baseName}-multi-page${PDF_EXTENSION}`;
 }
 
 function hasExtension(filename: string, extension: string) {

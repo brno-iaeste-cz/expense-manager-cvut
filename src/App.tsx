@@ -16,7 +16,7 @@ import {
   getReceiptAcceptAttribute,
   getReceiptPreviewType,
   isSupportedReceiptFile,
-  prepareReceiptFile,
+  prepareReceiptFiles,
 } from './receipt-file';
 
 const allowedEmailDomain = 'iaeste.cz';
@@ -235,7 +235,7 @@ function UnverifiedAccount({ user, onRefresh }: { user: User; onRefresh: () => v
 
 function ExpenseApp({ user }: { user: User }) {
   const [form, setForm] = useState<ExpenseForm>(emptyForm);
-  const [receipt, setReceipt] = useState<File | null>(null);
+  const [receiptFiles, setReceiptFiles] = useState<File[]>([]);
   const [preparedReceipt, setPreparedReceipt] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState('');
   const [receiptProcessing, setReceiptProcessing] = useState(false);
@@ -278,15 +278,15 @@ function ExpenseApp({ user }: { user: User }) {
   const defaultEmailBody = buildDefaultEmailBody(form.name, form.amount, selectedPaymentMethodLabel, formattedUser);
 
   useEffect(() => {
-    if (!receipt) {
+    if (!preparedReceipt) {
       setPreviewUrl('');
       return;
     }
 
-    const objectUrl = URL.createObjectURL(receipt);
+    const objectUrl = URL.createObjectURL(preparedReceipt);
     setPreviewUrl(objectUrl);
     return () => URL.revokeObjectURL(objectUrl);
-  }, [receipt]);
+  }, [preparedReceipt]);
 
   const canSubmit = useMemo(() => {
     return Boolean(
@@ -351,42 +351,66 @@ function ExpenseApp({ user }: { user: User }) {
     setCategorySearch('');
   }
 
-  async function handleReceiptChange(nextFile: File | null) {
+  async function prepareAndSetReceiptFiles(nextFiles: File[]) {
+    setReceiptFiles(nextFiles);
+    setPreparedReceipt(null);
+    setReceiptProcessing(true);
+
+    try {
+      const normalizedReceipt = await prepareReceiptFiles(nextFiles);
+      setPreparedReceipt(normalizedReceipt);
+    } catch (error) {
+      setReceiptFiles([]);
+      setPreparedReceipt(null);
+      setReceiptError(error instanceof Error ? error.message : 'Doklad se nepodařilo zpracovat.');
+    } finally {
+      setReceiptProcessing(false);
+    }
+  }
+
+  async function handleReceiptChange(nextFiles: File[]) {
     setStatus('idle');
     setMessage('');
     setEmailStatus('idle');
     setEmailMessage('');
     setReceiptError('');
 
-    if (!nextFile) {
-      setReceipt(null);
+    if (nextFiles.length === 0) {
+      setReceiptFiles([]);
       setPreparedReceipt(null);
       setReceiptProcessing(false);
       return;
     }
 
-    if (!isSupportedReceiptFile(nextFile)) {
-      setReceipt(null);
+    if (nextFiles.some((file) => !isSupportedReceiptFile(file))) {
+      setReceiptFiles([]);
       setPreparedReceipt(null);
       setReceiptProcessing(false);
       setReceiptError('Podporované jsou pouze obrázky a PDF dokumenty.');
       return;
     }
 
-    setReceipt(nextFile);
-    setPreparedReceipt(null);
-    setReceiptProcessing(true);
+    await prepareAndSetReceiptFiles(nextFiles);
+  }
 
-    try {
-      const normalizedReceipt = await prepareReceiptFile(nextFile);
-      setPreparedReceipt(normalizedReceipt);
-    } catch (error) {
-      setReceipt(null);
-      setPreparedReceipt(null);
-      setReceiptError(error instanceof Error ? error.message : 'Doklad se nepodařilo zpracovat.');
-    } finally {
-      setReceiptProcessing(false);
+  async function handleReceiptReorder(fromIndex: number, toIndex: number) {
+    if (
+      fromIndex === toIndex ||
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      fromIndex >= receiptFiles.length ||
+      toIndex >= receiptFiles.length
+    ) {
+      return;
     }
+
+    setStatus('idle');
+    setMessage('');
+    setEmailStatus('idle');
+    setEmailMessage('');
+    setReceiptError('');
+
+    await prepareAndSetReceiptFiles(moveReceiptFile(receiptFiles, fromIndex, toIndex));
   }
 
   async function submitExpense(event: FormEvent<HTMLFormElement>) {
@@ -675,11 +699,13 @@ function ExpenseApp({ user }: { user: User }) {
           </section>
 
           <ReceiptPanel
-            receipt={receipt}
+            receiptFiles={receiptFiles}
+            preparedReceipt={preparedReceipt}
             previewUrl={previewUrl}
             receiptError={receiptError}
             receiptProcessing={receiptProcessing}
-            onReceiptChange={(file) => void handleReceiptChange(file)}
+            onReceiptChange={(files) => void handleReceiptChange(files)}
+            onReceiptReorder={(fromIndex, toIndex) => void handleReceiptReorder(fromIndex, toIndex)}
           />
         </div>
 
@@ -757,7 +783,7 @@ function ExpenseApp({ user }: { user: User }) {
                 <p className="mt-1 text-sm text-ink/65">
                   Příjemce: finance.brno@iaeste.cz
                 </p>
-                <p className="mt-1 text-sm text-ink/65">Příloha: {receipt?.name}</p>
+                <p className="mt-1 text-sm text-ink/65">Příloha: {preparedReceipt?.name ?? 'Bez přílohy'}</p>
               </div>
               <button className="icon-button" onClick={() => setEmailDialogOpen(false)} type="button" title="Zavřít">
                 <CloseIcon />
@@ -821,27 +847,52 @@ function ExpenseApp({ user }: { user: User }) {
 }
 
 function ReceiptPanel({
-  receipt,
+  receiptFiles,
+  preparedReceipt,
   previewUrl,
   receiptError,
   receiptProcessing,
   onReceiptChange,
+  onReceiptReorder,
 }: {
-  receipt: File | null;
+  receiptFiles: File[];
+  preparedReceipt: File | null;
   previewUrl: string;
   receiptError: string;
   receiptProcessing: boolean;
-  onReceiptChange: (file: File | null) => void;
+  onReceiptChange: (files: File[]) => void;
+  onReceiptReorder: (fromIndex: number, toIndex: number) => void;
 }) {
-  const previewType = getReceiptPreviewType(receipt);
+  const previewType = getReceiptPreviewType(preparedReceipt);
   const accept = getReceiptAcceptAttribute();
+  const hasMultipleReceipts = receiptFiles.length > 1;
+  const pdfPreviewUrl = previewUrl ? `${previewUrl}#toolbar=0&navpanes=0&scrollbar=1` : '';
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
+  function handleDragStart(index: number) {
+    setDraggedIndex(index);
+  }
+
+  function handleDragOver(event: { preventDefault: () => void }) {
+    event.preventDefault();
+  }
+
+  function handleDrop(targetIndex: number) {
+    if (draggedIndex === null) return;
+    onReceiptReorder(draggedIndex, targetIndex);
+    setDraggedIndex(null);
+  }
+
+  function handleDragEnd() {
+    setDraggedIndex(null);
+  }
 
   return (
     <section className="flex min-w-0 flex-col rounded-lg border border-line bg-white p-3 shadow-panel sm:p-6">
       <div className="mb-5">
         <h2 className="text-xl font-bold text-ink">Doklad</h2>
         <p className="mt-1 text-sm text-ink/65">
-          Vyfoťte doklad na mobilu nebo nahrajte existující obrázek či PDF. Obrázky se před uložením převedou na PDF.
+          Najednou lze registrovat pouze jeden výdaj. Pokud má účtenka více stran, můžete přidat více obrázků.
         </p>
       </div>
 
@@ -854,7 +905,8 @@ function ReceiptPanel({
             type="file"
             accept={accept}
             capture="environment"
-            onChange={(event) => onReceiptChange(event.target.files?.[0] ?? null)}
+            multiple
+            onChange={(event) => onReceiptChange(Array.from(event.target.files ?? []))}
           />
         </label>
 
@@ -865,7 +917,8 @@ function ReceiptPanel({
             className="sr-only"
             type="file"
             accept={accept}
-            onChange={(event) => onReceiptChange(event.target.files?.[0] ?? null)}
+            multiple
+            onChange={(event) => onReceiptChange(Array.from(event.target.files ?? []))}
           />
         </label>
       </div>
@@ -873,7 +926,7 @@ function ReceiptPanel({
       <div className="mt-5 flex aspect-[7/5] min-h-56 items-center justify-center overflow-hidden rounded-md border border-dashed border-line bg-mist sm:min-h-80 lg:flex-1 lg:aspect-auto">
         {previewUrl ? (
           previewType === 'pdf' ? (
-            <iframe className="h-full w-full bg-white" src={previewUrl} title="Náhled PDF dokladu" />
+            <iframe className="h-full w-full bg-white" src={pdfPreviewUrl} title="Náhled PDF dokladu" />
           ) : (
             <img className="h-full w-full object-contain" src={previewUrl} alt="Náhled dokladu" />
           )
@@ -892,16 +945,45 @@ function ReceiptPanel({
         <p className="mt-4 rounded-md bg-coral/10 px-3 py-2 text-sm font-semibold text-red-700">{receiptError}</p>
       ) : null}
 
-      {receipt ? (
-        <div className="mt-4 flex items-center justify-between gap-3 rounded-md bg-mist px-3 py-2">
-          <span className="truncate text-sm font-semibold text-ink">{receipt.name}</span>
-          <button
-            className="rounded-md px-2 py-1 text-sm font-bold text-red-700 hover:bg-coral/10"
-            onClick={() => onReceiptChange(null)}
-            type="button"
-          >
-            Odebrat
-          </button>
+      {receiptFiles.length > 0 ? (
+        <div className="mt-4 grid gap-2">
+          {hasMultipleReceipts ? (
+            <p className="text-sm text-ink/65">Přetáhnutím můžete změnit pořadí stránek.</p>
+          ) : null}
+          <div className="flex items-center justify-between gap-3 rounded-md bg-mist px-3 py-2">
+            <span className="text-sm font-semibold text-ink">
+              {hasMultipleReceipts ? `${receiptFiles.length} obrázky v jednom PDF` : 'Vybraný doklad'}
+            </span>
+            <button
+              className="shrink-0 rounded-md px-2 py-1 text-sm font-bold text-red-700 hover:bg-coral/10"
+              onClick={() => onReceiptChange([])}
+              type="button"
+            >
+              Odebrat
+            </button>
+          </div>
+          {receiptFiles.map((file, index) => {
+            const isDragging = draggedIndex === index;
+
+            return (
+              <div
+                key={`${file.name}-${index}`}
+                className={`flex items-center justify-between gap-3 rounded-md px-3 py-2 ${
+                  isDragging ? 'bg-brand/10 ring-2 ring-brand/20' : 'bg-mist'
+                } ${hasMultipleReceipts ? 'cursor-grab' : ''}`}
+                draggable={hasMultipleReceipts}
+                onDragEnd={handleDragEnd}
+                onDragOver={handleDragOver}
+                onDragStart={() => handleDragStart(index)}
+                onDrop={() => handleDrop(index)}
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-ink">{file.name}</p>
+                  {hasMultipleReceipts ? <p className="text-xs text-ink/60">Strana {index + 1}</p> : null}
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </section>
@@ -962,6 +1044,13 @@ function normalizeText(value: string) {
 
 function parseAmount(value: string) {
   return Number(value.replace(',', '.'));
+}
+
+function moveReceiptFile(files: File[], fromIndex: number, toIndex: number) {
+  const nextFiles = [...files];
+  const [movedFile] = nextFiles.splice(fromIndex, 1);
+  nextFiles.splice(toIndex, 0, movedFile);
+  return nextFiles;
 }
 
 function buildDefaultEmailSubject(expenseName: string) {
