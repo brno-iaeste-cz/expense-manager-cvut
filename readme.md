@@ -127,9 +127,13 @@ clasp versions
 
 The web app URL is public, so the secret must be long and unguessable. A good value is at least 32 random characters.
 
-`expensesSpreadsheetId` points to the expense workbook. `expensesSheetName` selects the expense tab (currently `TEST`). The writer requires the exact TEST headers listed below and stores budget and subgroup in separate columns. Header whitespace is trimmed; legacy aliases are not accepted. It preserves VAT, notes, and account columns and ignores prefilled closure checkboxes when finding a free row. All required columns, including the expense date, must already exist. Missing or duplicate headers stop submission before any receipt upload or log write. The writer never creates columns.
+`expensesSpreadsheetId` points to the expense workbook. Each submission selects a Czech month/year tab using its expense date: `2026-09-29` goes to `Září 26`, and `2027-01-01` goes to `Leden 27`. A missing month tab is copied from the latest dated Czech month/year tab (regardless of tab position). Only the copy is cleared below row 1, including values, formulas, and cell notes; headers, formatting, column widths, and validation rules are retained. TEST and other non-month tabs are ignored. If no monthly tab exists yet, the first one is created with standard headers and a bold, frozen header row. Existing monthly tabs are reused; their headers must match the field names below. Invalid calendar dates are rejected.
+
+Header whitespace is trimmed; legacy aliases are not accepted. The writer stores budget and subgroup in separate columns, preserves VAT, notes, and account columns, and ignores prefilled closure checkboxes when finding a free row. Missing or duplicate headers in an existing tab stop submission before any receipt upload or log write. A script lock protects month creation and row selection from concurrent submissions. Existing TEST records are not migrated; this routing applies to new submissions. The log workbook continues receiving all submissions in its configured log tab.
 
 Instead of hard-coding `expensesSpreadsheetId`, you can also set a Script Property named `EXPENSES_SPREADSHEET_ID`.
+
+Receipts are saved inside monthly subfolders of `driveFolderId`, based on the expense date. Names use `YYYY_MM_Month` with capitalized Czech month names including diacritics, for example `2025_05_Květen` or `2026_09_Září`. The writer reuses a matching child folder or creates it under the submission lock. Submissions without a receipt do not create folders. Existing receipt files are not moved.
 
 ## Google Sheet
 
@@ -172,7 +176,7 @@ The form uses two levels, budget and subgroup, with search across both. Generate
 
 `npm run build` uses the current category file and does not sync automatically. Run sync before building when the source categories change.
 
-Deploy the updated Apps Script and web app together to enable the new form and TEST writer. Local build and mapping tests do not submit live expenses.
+Deploy the updated Apps Script to enable monthly routing. Local mapping tests do not submit live expenses.
 
 ## Cloudflare Pages
 

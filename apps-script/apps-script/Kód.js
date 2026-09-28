@@ -1,7 +1,6 @@
 const PROD_CONFIG = {
   sheetId: '1qnBqstqYTWoSvUPxJOu8iRqrnFETrZzYptfH6YCHbQM',
   sheetName: 'Expenses',
-  expensesSheetName: 'TEST',
   expensesSpreadsheetId: '1lIR4iRRP4cPpq8TcnPbe-b7Zd91-pdXb4mHJdIyNu1s', //dev: 1lIR4iRRP4cPpq8TcnPbe-b7Zd91-pdXb4mHJdIyNu1s, prod: 
   driveFolderId: '1Cx_wPHTewsnvJD5rYhmta7_Vpde8mxt_', //dev: 1Cx_wPHTewsnvJD5rYhmta7_Vpde8mxt_, prod: 
   emailRecipient: 'martin.tavoda@iaeste.cz', // finance.brno@iaeste.cz
@@ -12,7 +11,6 @@ const PROD_CONFIG = {
 const DEV_CONFIG = {
   sheetId: '1qnBqstqYTWoSvUPxJOu8iRqrnFETrZzYptfH6YCHbQM',
   sheetName: 'Expenses',
-  expensesSheetName: 'TEST',
   expensesSpreadsheetId: '1lIR4iRRP4cPpq8TcnPbe-b7Zd91-pdXb4mHJdIyNu1s',
   driveFolderId: '1Cx_wPHTewsnvJD5rYhmta7_Vpde8mxt_',
   emailRecipient: 'martin.tavoda@iaeste.cz',
@@ -23,6 +21,7 @@ const DEV_CONFIG = {
 const CONFIG = PROD_CONFIG; 
 
 function doPost(e) {
+  let expenseLock = null;
   try {
     const payload = JSON.parse(e.postData.contents);
 
@@ -52,11 +51,13 @@ function doPost(e) {
     }
 
     const logRow = buildExpenseLogRow(sheet, payload);
+    expenseLock = LockService.getScriptLock();
+    expenseLock.waitLock(30000);
     const budgetTarget = findBudgetWriteTarget(expense);
 
-    const folder = DriveApp.getFolderById(CONFIG.driveFolderId);
     let file = null;
     if (receipt && receipt.base64) {
+      const folder = getMonthlyReceiptFolder(DriveApp.getFolderById(CONFIG.driveFolderId), expense.expenseDate);
       const filename = buildReceiptFilename(expense, user, receipt.filename);
       const bytes = Utilities.base64Decode(receipt.base64);
       const blob = Utilities.newBlob(bytes, getReceiptMimeType(receipt), filename);
@@ -75,6 +76,14 @@ function doPost(e) {
     });
   } catch (error) {
     return jsonResponse({ ok: false, error: String(error) }, 500);
+  } finally {
+    if (expenseLock && expenseLock.hasLock()) {
+      try {
+        SpreadsheetApp.flush();
+      } finally {
+        expenseLock.releaseLock();
+      }
+    }
   }
 }
 
@@ -108,11 +117,80 @@ function buildExpenseLogRow(sheet, payload) {
   };
 }
 
+function parseExpenseDate(expenseDate) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(expenseDate || ''));
+  if (!match) throw new Error('Invalid expense date. Expected YYYY-MM-DD.');
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (year < 1 || month < 1 || month > 12 || day < 1 || day > days[month - 1]) {
+    throw new Error('Invalid expense date.');
+  }
+  return { year: match[1], month: match[2] };
+}
+
+function getExpenseMonthSheetName(expenseDate) {
+  const date = parseExpenseDate(expenseDate);
+  const months = ['Leden', 'Únor', 'Březen', 'Duben', 'Květen', 'Červen', 'Červenec', 'Srpen', 'Září', 'Říjen', 'Listopad', 'Prosinec'];
+  return months[Number(date.month) - 1] + ' ' + date.year.slice(-2);
+}
+
+function getMonthlyReceiptFolder(parentFolder, expenseDate) {
+  const date = parseExpenseDate(expenseDate);
+  const months = ['Leden', 'Únor', 'Březen', 'Duben', 'Květen', 'Červen', 'Červenec', 'Srpen', 'Září', 'Říjen', 'Listopad', 'Prosinec'];
+  const name = date.year + '_' + date.month + '_' + months[Number(date.month) - 1];
+  // Called under the submission lock so concurrent uploads reuse the same folder.
+  const existing = parentFolder.getFoldersByName(name);
+  return existing.hasNext() ? existing.next() : parentFolder.createFolder(name);
+}
+
+function findLatestMonthlyExpenseSheet(spreadsheet) {
+  const months = ['Leden', 'Únor', 'Březen', 'Duben', 'Květen', 'Červen', 'Červenec', 'Srpen', 'Září', 'Říjen', 'Listopad', 'Prosinec'];
+  let latest = null;
+  let latestMonth = -1;
+  spreadsheet.getSheets().forEach((sheet) => {
+    const match = /^(\S+) (\d{2})$/.exec(sheet.getName());
+    if (!match) return;
+    const month = months.indexOf(match[1]);
+    if (month < 0) return;
+    const monthIndex = (2000 + Number(match[2])) * 12 + month;
+    if (monthIndex > latestMonth) {
+      latest = sheet;
+      latestMonth = monthIndex;
+    }
+  });
+  return latest;
+}
+
+function getMonthlyExpenseSheet(spreadsheet, expenseDate) {
+  const name = getExpenseMonthSheetName(expenseDate);
+  const existing = spreadsheet.getSheetByName(name);
+  if (existing) return existing;
+  const template = findLatestMonthlyExpenseSheet(spreadsheet);
+  if (template) {
+    const sheet = template.copyTo(spreadsheet);
+    // Clear only the copy's body; keep headers, formatting and validation rules.
+    if (sheet.getMaxRows() > 1) {
+      const entries = sheet.getRange(2, 1, sheet.getMaxRows() - 1, sheet.getMaxColumns());
+      entries.clearContent();
+      entries.clearNote();
+    }
+    sheet.setName(name);
+    return sheet;
+  }
+  const sheet = spreadsheet.insertSheet(name);
+  const headers = ['Jméno', 'Datum uskutečnění výdaje', 'Název výdaje', 'Název obchodu', 'Kdo to schválil', 'Rozpočet', 'Podskupina', 'Částka', 'DPH', 'Způsob platby', 'URL', 'Poznámka', 'Uzavřeno', 'Protiúčet'];
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+  sheet.setFrozenRows(1);
+  return sheet;
+}
+
 function findBudgetWriteTarget(expense) {
   const spreadsheetId = getExpensesSpreadsheetId();
   if (!spreadsheetId) return null;
-  const sheet = SpreadsheetApp.openById(spreadsheetId).getSheetByName(CONFIG.expensesSheetName || 'TEST');
-  if (!sheet) throw new Error('Expense sheet tab not found.');
+  const sheet = getMonthlyExpenseSheet(SpreadsheetApp.openById(spreadsheetId), expense.expenseDate);
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0].map((value) => String(value).trim());
   const fieldHeaders = {
     user: 'Jméno',
