@@ -1,21 +1,23 @@
 const PROD_CONFIG = {
-  sheetId: '1fisxKO42wsDBjQx-UZGiOhUqg9ZFYTBSW4IAk6nj-CY',
+  sheetId: '1qnBqstqYTWoSvUPxJOu8iRqrnFETrZzYptfH6YCHbQM',
   sheetName: 'Expenses',
-  expensesSpreadsheetId: '19OArVP93kWrWzlRVVwrHteuh0Em6ekh9FyigkEd7Y68', //dev: 1dMACC3Gyeor0Xv-mh0sN1y7sDOepLLiNeljMUqwdjWE, prod: 19OArVP93kWrWzlRVVwrHteuh0Em6ekh9FyigkEd7Y68
-  driveFolderId: '1zwG1WNtUu0OLi-KYv98iz5y6NBgJl0R5', //dev: 1mwZucy4X0_FLU8xP6h8qYfvH8uadM001, prod: 1zwG1WNtUu0OLi-KYv98iz5y6NBgJl0R5
-  emailRecipient: 'finance.brno@iaeste.cz', // finance.brno@iaeste.cz
+  expensesSheetName: 'TEST',
+  expensesSpreadsheetId: '1lIR4iRRP4cPpq8TcnPbe-b7Zd91-pdXb4mHJdIyNu1s', //dev: 1lIR4iRRP4cPpq8TcnPbe-b7Zd91-pdXb4mHJdIyNu1s, prod: 
+  driveFolderId: '1Cx_wPHTewsnvJD5rYhmta7_Vpde8mxt_', //dev: 1Cx_wPHTewsnvJD5rYhmta7_Vpde8mxt_, prod: 
+  emailRecipient: 'martin.tavoda@iaeste.cz', // finance.brno@iaeste.cz
   senderAlias: 'it.brno@iaeste.cz',
-  secret: 'CHANGE_THIS_TO_A_LONG_RANDOM_SECRET',
+  secret: 'CHANGE_THIS_TO_A_LONG_RANDOM_SECRET_CVUT',
 };
 
 const DEV_CONFIG = {
-  sheetId: '1fisxKO42wsDBjQx-UZGiOhUqg9ZFYTBSW4IAk6nj-CY',
+  sheetId: '1qnBqstqYTWoSvUPxJOu8iRqrnFETrZzYptfH6YCHbQM',
   sheetName: 'Expenses',
-  expensesSpreadsheetId: '1dMACC3Gyeor0Xv-mh0sN1y7sDOepLLiNeljMUqwdjWE',
-  driveFolderId: '1mwZucy4X0_FLU8xP6h8qYfvH8uadM001',
+  expensesSheetName: 'TEST',
+  expensesSpreadsheetId: '1lIR4iRRP4cPpq8TcnPbe-b7Zd91-pdXb4mHJdIyNu1s',
+  driveFolderId: '1Cx_wPHTewsnvJD5rYhmta7_Vpde8mxt_',
   emailRecipient: 'martin.tavoda@iaeste.cz',
   senderAlias: 'it.brno@iaeste.cz',
-  secret: 'CHANGE_THIS_TO_A_LONG_RANDOM_SECRET',
+  secret: 'CHANGE_THIS_TO_A_LONG_RANDOM_SECRET_CVUT',
 };
 
 const CONFIG = PROD_CONFIG; 
@@ -49,6 +51,7 @@ function doPost(e) {
       return jsonResponse({ ok: false, error: 'Sheet tab not found.' }, 500);
     }
 
+    const logRow = buildExpenseLogRow(sheet, payload);
     const budgetTarget = findBudgetWriteTarget(expense);
 
     const folder = DriveApp.getFolderById(CONFIG.driveFolderId);
@@ -60,22 +63,10 @@ function doPost(e) {
       file = folder.createFile(blob);
     }
 
-    sheet.appendRow([
-      payload.submittedAt || new Date().toISOString(),
-      expense.expenseDate || '',
-      expense.name,
-      expense.amount,
-      expense.department,
-      expense.category,
-      expense.subcategory,
-      expense.paymentMethod,
-      file ? file.getUrl() : '',
-      user.name || '',
-      user.email || '',
-      user.uid || '',
-    ]);
+    logRow.values[logRow.receiptIndex] = file ? file.getUrl() : '';
+    sheet.appendRow(logRow.values);
 
-    writeExpenseToBudgetSpreadsheet(budgetTarget, expense, user);
+    writeExpenseToBudgetSpreadsheet(budgetTarget, expense, user, file ? file.getUrl() : '');
 
     return jsonResponse({
       ok: true,
@@ -87,55 +78,89 @@ function doPost(e) {
   }
 }
 
-function findBudgetWriteTarget(expense) {
-  const spreadsheetId = getExpensesSpreadsheetId();
-  if (!spreadsheetId) {
-    return null;
-  }
-
-  const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
-  const sheet = spreadsheet.getSheetByName(expense.department);
-  if (!sheet) {
-    throw new Error(`Department sheet not found: ${expense.department}`);
-  }
-
-  const categoryBlock = findCategoryBlock(sheet, expense.category);
-  if (!categoryBlock) {
-    throw new Error(`Category block not found: ${expense.department} / ${expense.category}`);
-  }
-
-  const expenseHeaderRow = findExpenseHeaderRow(sheet, categoryBlock.startColumn);
-  if (!expenseHeaderRow) {
-    throw new Error(`Expense table header not found: ${expense.department} / ${expense.category}`);
-  }
-
-  const row = findNextExpenseRow(sheet, expenseHeaderRow, categoryBlock.startColumn);
-
+function buildExpenseLogRow(sheet, payload) {
+  const expense = payload.expense;
+  const user = payload.user || {};
+  const fields = {
+    'Čas odeslání': payload.submittedAt || new Date().toISOString(),
+    'Datum uskutečnění výdaje': expense.expenseDate || '',
+    'Název výdaje': expense.name,
+    'Název obchodu': expense.storeName || '',
+    'Kdo to schválil': expense.approvedBy || '',
+    'Částka': expense.amount,
+    'Rozpočet': expense.department,
+    'Podskupina': expense.category,
+    'Způsob platby': expense.paymentMethod,
+    'URL dokladu': '',
+    'Jméno': user.name || '',
+    'E-mail': user.email || '',
+    'ID uživatele': user.uid || '',
+  };
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0].map((value) => String(value).trim());
+  Object.keys(fields).forEach((header) => {
+    const index = headers.indexOf(header);
+    if (index < 0) throw new Error('Missing log column: ' + header);
+    if (headers.lastIndexOf(header) !== index) throw new Error('Duplicate log column: ' + header);
+  });
   return {
-    sheet,
-    row,
-    startColumn: categoryBlock.startColumn,
+    values: headers.map((header) => Object.prototype.hasOwnProperty.call(fields, header) ? fields[header] : ''),
+    receiptIndex: headers.indexOf('URL dokladu'),
   };
 }
 
-function writeExpenseToBudgetSpreadsheet(target, expense, user) {
-  if (!target) {
-    return;
-  }
+function findBudgetWriteTarget(expense) {
+  const spreadsheetId = getExpensesSpreadsheetId();
+  if (!spreadsheetId) return null;
+  const sheet = SpreadsheetApp.openById(spreadsheetId).getSheetByName(CONFIG.expensesSheetName || 'TEST');
+  if (!sheet) throw new Error('Expense sheet tab not found.');
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0].map((value) => String(value).trim());
+  const fieldHeaders = {
+    user: 'Jméno',
+    expenseDate: 'Datum uskutečnění výdaje',
+    name: 'Název výdaje',
+    storeName: 'Název obchodu',
+    approvedBy: 'Kdo to schválil',
+    amount: 'Částka',
+    paymentMethod: 'Způsob platby',
+    department: 'Rozpočet',
+    category: 'Podskupina',
+    receiptUrl: 'URL',
+    closed: 'Uzavřeno',
+  };
+  const columns = {};
+  Object.keys(fieldHeaders).forEach((key) => {
+    const index = headers.indexOf(fieldHeaders[key]);
+    if (index < 0) throw new Error('Missing expense column: ' + fieldHeaders[key]);
+    if (headers.lastIndexOf(fieldHeaders[key]) !== index) throw new Error('Duplicate expense column: ' + fieldHeaders[key]);
+    columns[key] = index + 1;
+  });
+  // Ignore prefilled checkboxes when locating the first unused expense row.
+  const rows = sheet.getLastRow() > 1
+    ? sheet.getRange(2, 1, sheet.getLastRow() - 1, headers.length).getDisplayValues() : [];
+  const emptyIndex = rows.findIndex((row) => row.every((value, index) =>
+    index === columns.closed - 1 || String(value).trim() === ''));
+  return { sheet, columns, row: emptyIndex < 0 ? rows.length + 2 : emptyIndex + 2 };
+}
 
-  const amount = Number(expense.amount);
-  const note = expense.name;
-  let payer = '';
-  if (expense.paymentMethod != 'Soukromá platba'){
-    payer = expense.paymentMethod || '';
-  } else{
-    payer = user.name || user.email || '';
-  }
-  
-
-  target.sheet.getRange(target.row, target.startColumn, 1, 5).setValues([
-    [false, Number.isFinite(amount) ? amount : expense.amount, expense.subcategory, note, payer],
-  ]);
+function writeExpenseToBudgetSpreadsheet(target, expense, user, receiptUrl) {
+  if (!target) return;
+  if (target.row > target.sheet.getMaxRows()) target.sheet.insertRowsAfter(target.sheet.getMaxRows(), 1);
+  const values = {
+    user: user.name || user.email || '',
+    name: expense.name,
+    storeName: expense.storeName,
+    approvedBy: expense.approvedBy,
+    department: expense.department,
+    category: expense.category,
+    amount: Number(expense.amount),
+    paymentMethod: expense.paymentMethod,
+    receiptUrl: receiptUrl || '',
+    closed: false,
+    expenseDate: expense.expenseDate,
+  };
+  Object.keys(values).forEach((key) => {
+    target.sheet.getRange(target.row, target.columns[key]).setValue(values[key]);
+  });
 }
 
 function sendExpenseEmail(payload) {
@@ -176,26 +201,9 @@ function getCategories(payload) {
   }
 
   const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
-  const requestedDepartments = Array.isArray(payload.departments) ? payload.departments : [];
-  const departments = requestedDepartments.length > 0
-    ? requestedDepartments
-    : spreadsheet.getSheets().map((sheet) => sheet.getName());
-  const categoryTree = {};
-
-  departments.forEach((department) => {
-    const sheet = spreadsheet.getSheetByName(department);
-    if (!sheet) {
-      return;
-    }
-
-    const rows = sheet.getDataRange().getDisplayValues();
-    const categories = extractCategories(rows);
-    if (categories.length > 0) {
-      categoryTree[department] = categories;
-    }
-  });
-
-  return jsonResponse({ ok: true, categoryTree: categoryTree });
+  const sheet = spreadsheet.getSheetByName('rozpocty');
+  if (!sheet) throw new Error('Sheet tab not found: rozpocty');
+  return jsonResponse({ ok: true, categoryTree: extractCategories(sheet.getDataRange().getDisplayValues()) });
 }
 
 function authorizeMailPermission() {
@@ -203,38 +211,17 @@ function authorizeMailPermission() {
 }
 
 function extractCategories(rows) {
-  const headerRow = rows[0] || [];
-  const typeRow = rows[1] || [];
-  const categories = [];
-
-  for (let column = 0; column < typeRow.length; column += 1) {
-    if (String(typeRow[column] || '').trim() !== 'Výdaje' || !headerRow[column]) {
-      continue;
-    }
-
-    const category = String(headerRow[column] || '').trim();
-    const subcategories = [];
-
-    for (let row = 3; row < rows.length; row += 1) {
-      const value = String((rows[row] && rows[row][column]) || '').trim();
-
-      if (value === 'Cena') {
-        break;
-      }
-
-      if (value && value !== 'Odvětví') {
-        subcategories.push(value);
-      }
-    }
-
-    categories.push({
-      value: category,
-      label: category,
-      subcategories: unique(subcategories),
-    });
-  }
-
-  return categories;
+  const tree = Object.create(null);
+  (rows[0] || []).forEach((header, column) => {
+    const department = String(header).trim();
+    if (!department || department.toUpperCase() === 'DPH') return;
+    const categories = unique(rows.slice(1).map((row) => String(row[column] || '').trim()).filter(Boolean));
+    if (!categories.length) return;
+    if (Object.prototype.hasOwnProperty.call(tree, department)) throw new Error('Duplicate department: ' + department);
+    tree[department] = categories.map((value) => ({ value: value, label: value }));
+  });
+  if (!Object.keys(tree).length) throw new Error('No departments found in rozpocty.');
+  return tree;
 }
 
 function getExpensesSpreadsheetId() {
@@ -244,70 +231,6 @@ function getExpensesSpreadsheetId() {
   }
 
   return PropertiesService.getScriptProperties().getProperty('EXPENSES_SPREADSHEET_ID');
-}
-
-function findCategoryBlock(sheet, category) {
-  const lastColumn = sheet.getLastColumn();
-  const categoryRow = sheet.getRange(1, 1, 2, lastColumn).getDisplayValues();
-
-  for (let column = 1; column <= lastColumn; column += 1) {
-    const categoryName = String(categoryRow[0][column - 1] || '').trim();
-    const type = String(categoryRow[1][column - 1] || '').trim();
-
-    if (categoryName === category && type === 'Výdaje') {
-      return { startColumn: column };
-    }
-  }
-
-  return null;
-}
-
-function findExpenseHeaderRow(sheet, startColumn) {
-  const maxRows = sheet.getLastRow();
-  const values = sheet.getRange(1, startColumn, maxRows, 1).getDisplayValues();
-
-  for (let row = 1; row <= maxRows; row += 1) {
-    if (String(values[row - 1][0] || '').trim() === 'Cena') {
-      return row;
-    }
-  }
-
-  return null;
-}
-
-function findNextExpenseRow(sheet, headerRow, startColumn) {
-  const firstDataRow = headerRow + 1;
-  const maxRows = sheet.getMaxRows();
-  const rowCount = maxRows - headerRow;
-
-  if (rowCount <= 0) {
-    sheet.insertRowsAfter(maxRows, 1);
-    return maxRows + 1;
-  }
-
-  const values = sheet.getRange(firstDataRow, startColumn, rowCount, 5).getDisplayValues();
-
-  for (let index = 0; index < values.length; index += 1) {
-    const row = values[index];
-    const hasData = row.slice(1).some((value) => String(value || '').trim() !== '');
-
-    if (!hasData) {
-      return firstDataRow + index;
-    }
-  }
-
-  sheet.insertRowsAfter(maxRows, 1);
-  return maxRows + 1;
-}
-
-function buildBudgetExpenseNote(expense) {
-  const parts = [expense.name];
-
-  if (expense.paymentMethod) {
-    parts.push(expense.paymentMethod);
-  }
-
-  return parts.filter(Boolean).join(' - ');
 }
 
 function jsonResponse(payload) {

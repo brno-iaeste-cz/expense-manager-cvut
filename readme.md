@@ -114,8 +114,8 @@ cd apps-script
 clasp login
 clasp push
 clasp create-version "versionName"
-clasp create-deployment -V <version> -d "Development deployment" -i AKfycbxglT-AJP83Vv7hzP0ehoU9oJNyjU2AKhb9VY9m2qAj0CvQRSO0DOUKausZ59FBdB0I
-clasp create-deployment -V <version> -d "Production deployment" -i AKfycbyB-hopUcS7vQ72kAJ0Acr0TEtjLDHo2YxTDZOMoRxC73takFGnBO3sMyEh_h5ObOH6
+clasp create-deployment -V <version> -d "Development deployment" -i AKfycbw657CPSuhVofzoXoUZBeQ3pk7TG_1YyAil1atPyWQIJZchHExUzIk4yFYevQp0T7yj
+clasp create-deployment -V <version> -d "Production deployment" -i 
 ```
 
 Useful inspection commands:
@@ -127,87 +127,52 @@ clasp versions
 
 The web app URL is public, so the secret must be long and unguessable. A good value is at least 32 random characters.
 
-`expensesSpreadsheetId` is the budget spreadsheet used for category tabs such as `PR`, `HR`, `EX`, `Akce`, and `Projekty`. When an expense is submitted, Apps Script appends the row to the `Expenses` tab and also writes the amount into the matching budget sheet block:
-
-- `department` selects the spreadsheet tab.
-- `category` selects the block whose first row contains the category name and whose second row contains `Výdaje`.
-- `subcategory` is written into the `Odvětví` column.
+`expensesSpreadsheetId` points to the expense workbook. `expensesSheetName` selects the expense tab (currently `TEST`). The writer requires the exact TEST headers listed below and stores budget and subgroup in separate columns. Header whitespace is trimmed; legacy aliases are not accepted. It preserves VAT, notes, and account columns and ignores prefilled closure checkboxes when finding a free row. All required columns, including the expense date, must already exist. Missing or duplicate headers stop submission before any receipt upload or log write. The writer never creates columns.
 
 Instead of hard-coding `expensesSpreadsheetId`, you can also set a Script Property named `EXPENSES_SPREADSHEET_ID`.
 
 ## Google Sheet
 
-Add a tab named exactly:
+The expense tab uses these exact field names (columns may appear in any order):
 
 ```text
-Expenses
+Jméno, Datum uskutečnění výdaje, Název výdaje, Název obchodu,
+Kdo to schválil, Částka, Způsob platby, Rozpočet, Podskupina
 ```
 
-Add this header row:
+`Jméno` comes from the signed-in Google account. `URL` and `Uzavřeno` are also required for receipt links and closure status. Other columns are preserved. Rename `Datum` to `Datum uskutečnění výdaje` before using the updated writer.
+
+Internal API keys remain stable: `expenseDate`, `name`, `storeName`, `approvedBy`, `amount`, `paymentMethod`, `department` (Rozpočet), and `category` (Podskupina). Apps Script maps each key to exactly one header.
+
+The log tab configured by `sheetId` and `sheetName` uses these columns:
 
 ```text
-Submitted At, Name, Amount, Department, Category, Subcategory,
-Payment Method, Receipt URL, User Full Name, User Email, User UID
+Čas odeslání, Datum uskutečnění výdaje, Název výdaje, Název obchodu,
+Kdo to schválil, Částka, Rozpočet, Podskupina, Způsob platby,
+URL dokladu, Jméno, E-mail, ID uživatele
 ```
 
-The Apps Script appends data in that order.
+The log writer matches these headers by name, so columns can be reordered. Leading and trailing spaces are ignored. Missing or duplicate required headers stop submission before uploading a receipt or writing data. There is no reserved column.
 
 ## Category Sync
 
-Expense departments, categories, and subcategories are generated into `src/categories.ts` from the budgeting Google Sheet.
-
-Run a manual sync when the budgeting spreadsheet categories change:
+Run this command to regenerate `src/categories.ts`:
 
 ```bash
-npm run categories:sync -- <spreadsheetId>
+npm run categories:sync -- 1lIR4iRRP4cPpq8TcnPbe-b7Zd91-pdXb4mHJdIyNu1s
 ```
 
-Example:
+The general command remains `npm run categories:sync -- <spreadsheetId>`.
 
-```bash
-npm run categories:sync -- 1dMACC3Gyeor0Xv-mh0sN1y7sDOepLLiNeljMUqwdjWE
-```
+The `rozpocty` tab must have budget names in the first row, with their subgroups underneath in the same column. Blank cells and the `DPH` column are ignored. Category names are trimmed, deduplicated within each department, and kept in sheet order. Empty or invalid results do not replace the current category file.
 
-The spreadsheet must be accessible to the Google account that owns the deployed Apps Script web app. The local machine does not need direct access to the sheet.
+Public sheets are read directly through Google CSV export. Private sheets use `APPS_SCRIPT_WEB_APP_URL` and `APPS_SCRIPT_SECRET` from the environment or `.dev.vars`; deploy the updated Apps Script first and give its owner access to the workbook.
 
-The sync reads these sheet tabs:
+The form uses two levels, budget and subgroup, with search across both. Generated `value` fields retain sheet names for submission; `label` fields control displayed text. Manual edits to the generated file are replaced by the next sync.
 
-```text
-PR, HR, EX, Akce, Projekty, Cesťák
-```
+`npm run build` uses the current category file and does not sync automatically. Run sync before building when the source categories change.
 
-Only tabs that contain category blocks are written to `src/categories.ts`. A category block is detected by a `Výdaje` cell in the second row. The category name is read from the first row of that same column, and subcategories are read from the same column under `Odvětví` until `Cena`.
-
-`npm run build` does not sync categories automatically. If you need fresh categories, run `npm run categories:sync -- <spreadsheetId>` manually before `npm run build`. If you skip the manual sync, the build uses the current checked-in `src/categories.ts`.
-
-To use a different tab list:
-
-```powershell
-$env:CATEGORIES_DEPARTMENT_SHEETS="PR,HR,EX,Akce,Projekty"
-npm run categories:sync -- <spreadsheetId>
-```
-
-`src/categories.ts` uses a stable contract for categories:
-
-- `value` is the raw category name used for sheet lookup and API submission.
-- `label` is the display name shown in the UI.
-
-If one category should be displayed differently than it is named in the sheet, edit the generated entry in `src/categories.ts` and change only `label`. Keep `value` equal to the exact sheet category name.
-
-Example:
-
-```ts
-{
-  value: 'Mezinárodní akce',
-  label: 'Konference: 1 eur =',
-  subcategories: [...]
-}
-```
-
-The same rule applies in the generated search index:
-
-- `categoryValue` is used to write back to the form and later to the sheet lookup.
-- `categoryLabel` is used for visible text in the app.
+Deploy the updated Apps Script and web app together to enable the new form and TEST writer. Local build and mapping tests do not submit live expenses.
 
 ## Cloudflare Pages
 

@@ -1,7 +1,6 @@
 export type Category = {
   value: string;
   label: string;
-  subcategories: string[];
 };
 
 export type Department = {
@@ -14,209 +13,411 @@ export type CategorySearchResult = {
   departmentLabel: string;
   categoryValue: string;
   categoryLabel: string;
-  subcategoryValue: string;
-  subcategoryLabel: string;
 };
 
 export const categoryTree = {
-  PR: [
+  "Board": [
     {
-      value: 'Promo akce',
-      label: 'Promo akce',
-      subcategories: [
-        'Zaškolovák 1+2',
-        'Seznamovák 1+2',
-        'HzF',
-        'FASTfest',
-        'Majáles Studentsky',
-        'Pop Messe',
-        'Majales'
-      ]
+      "value": "Odmeny",
+      "label": "Odmeny"
     },
     {
-      value: 'Mikroeventy',
-      label: 'Mikroeventy',
-      subcategories: [
-        'Tea Day',
-        'Coffee Day',
-        'Svařák Day',
-        'Chocolate Day',
-        'Waffle',
-        'Stážový měsíc (ZkusTo, PubQuiz,?)',
-        'Ice cream day'
-      ]
+      "value": "Podpora činnosti",
+      "label": "Podpora činnosti"
     },
     {
-      value: 'Marketing',
-      label: 'Marketing',
-      subcategories: [
-        'Online',
-        'Offline'
-      ]
+      "value": "Poporadní pivo",
+      "label": "Poporadní pivo"
+    },
+    {
+      "value": "Porady",
+      "label": "Porady"
+    },
+    {
+      "value": "VGS",
+      "label": "VGS"
+    },
+    {
+      "value": "Volby",
+      "label": "Volby"
+    },
+    {
+      "value": "Ostatní",
+      "label": "Ostatní"
+    },
+    {
+      "value": "Rezerva",
+      "label": "Rezerva"
     }
   ],
-  HR: [
+  "Akce": [
     {
-      value: 'Lokální akce',
-      label: 'Lokální akce',
-      subcategories: [
-        'Schůzky',
-        'Twinning',
-        'Zahr. twin.',
-        'TB Brno'
-      ]
+      "value": "Výjezdy na konference",
+      "label": "Výjezdy na konference"
     },
     {
-      value: 'Interní meetingy',
-      label: 'Interní meetingy',
-      subcategories: [
-        'EX',
-        'PR',
-        'CR',
-        'HR',
-        'Board',
-        'Volby'
-      ]
+      "value": "Výjezdy akce",
+      "label": "Výjezdy akce"
     },
     {
-      value: 'HR akce pro členy',
-      label: 'HR akce pro členy',
-      subcategories: [
-        'Akce 1+2',
-        'Akce 3+4',
-        'Akce 5+6',
-        'Akce 7+8',
-        'Vánoční večírek',
-        'Grilování',
-        'Rezerva'
-      ]
+      "value": "Twinning",
+      "label": "Twinning"
     }
   ],
-  EX: [
+  "Office": [
     {
-      value: 'SR - akce pro stážisty',
-      label: 'SR - akce pro stážisty',
-      subcategories: [
-        'Společně',
-        'Stážista 1',
-        'Stážista 2',
-        'Stážista 3',
-        'Stážista 4',
-        'Stážista 5',
-        'Stážista 6',
-        'Stážista 7',
-        'Stážista 8',
-        'Stážista 9'
-      ]
+      "value": "IT",
+      "label": "IT"
     },
     {
-      value: 'Moravian Weekend & Příspěvek na pobytové náklady',
-      label: 'Moravian Weekend & Příspěvek na pobytové náklady',
-      subcategories: [
-        'MW',
-        'Stáž ve firmě1',
-        'Stáž ve firmě2',
-        'Stáž ve firmě3',
-        'Stáž ve firmě4'
-      ]
+      "value": "kancelárske potreby",
+      "label": "kancelárske potreby"
+    },
+    {
+      "value": "pošta",
+      "label": "pošta"
+    },
+    {
+      "value": "telefóny",
+      "label": "telefóny"
     }
   ],
-  Akce: [
+  "Kancl": [
     {
-      value: 'Konference: 1 eur =',
-      label: 'Mezinárodní akce',
-      subcategories: [
-        'CEC podzim',
-        'CEC jaro',
-        'JUMP',
-        'LEAP',
-        'CONNECT'
-      ]
+      "value": "nájom",
+      "label": "nájom"
     },
     {
-      value: 'Národní akce',
-      label: 'Národní akce',
-      subcategories: [
-        'Senát 1 (a 3-22/23)',
-        'Senát 2',
-        'Senát 3',
-        'CSID',
-        'IA Day',
-        'Akademie',
-        'nTB'
-      ]
+      "value": "internety",
+      "label": "internety"
+    },
+    {
+      "value": "revitalizace",
+      "label": "revitalizace"
+    },
+    {
+      "value": "ostatní",
+      "label": "ostatní"
     }
   ],
-  Projekty: [
+  "Ostatní": [
     {
-      value: 'Kancl',
-      label: 'Kancl',
-      subcategories: [
-        'Pošta',
-        'Kanc. potřeby',
-        'Upgrade kanclu',
-        'K vyrovnání (pouze finančník, vždy pseudoúčtenka)',
-        'Soukromé (DPH výdaj)'
-      ]
+      "value": "výpalné",
+      "label": "výpalné"
     },
     {
-      value: 'Projekty',
-      label: 'Projekty',
-      subcategories: [
-        'Diář',
-        'BigStep',
-        'BBC'
-      ]
+      "value": "nové projekty",
+      "label": "nové projekty"
+    }
+  ],
+  "Veletrh": [
+    {
+      "value": "Aplikace",
+      "label": "Aplikace"
     },
     {
-      value: 'Veletrh iKariéra v Brně (1)',
-      label: 'Veletrh iKariéra v Brně (1)',
-      subcategories: [
-        'Prostory',
-        'PrV',
-        'Grafika',
-        'Promo - online',
-        'Catering',
-        'Stánky',
-        'Hostess/Nosič'
-      ]
+      "value": "Brigádníci",
+      "label": "Brigádníci"
     },
     {
-      value: 'Veletrh iKariéra v Brně (2)',
-      label: 'Veletrh iKariéra v Brně (2)',
-      subcategories: [
-        'Zázemí (i jídlo)',
-        'Doprovodný program (venku i vevnitř - fotografové, líčení,..)',
-        'Večeře',
-        'Doprava/transport',
-        'CFT',
-        'CFT my ven (jízdné)',
-        'Nestandardní'
-      ]
+      "value": "Catering",
+      "label": "Catering"
+    },
+    {
+      "value": "DP",
+      "label": "DP"
+    },
+    {
+      "value": "Drobné výdaje",
+      "label": "Drobné výdaje"
+    },
+    {
+      "value": "Firmy",
+      "label": "Firmy"
+    },
+    {
+      "value": "Ostatní",
+      "label": "Ostatní"
+    },
+    {
+      "value": "Parkování",
+      "label": "Parkování"
+    },
+    {
+      "value": "Párty",
+      "label": "Párty"
+    },
+    {
+      "value": "Porada",
+      "label": "Porada"
+    },
+    {
+      "value": "Propagace",
+      "label": "Propagace"
+    },
+    {
+      "value": "Prostory",
+      "label": "Prostory"
+    },
+    {
+      "value": "Průvodce",
+      "label": "Průvodce"
+    },
+    {
+      "value": "Stánky",
+      "label": "Stánky"
+    },
+    {
+      "value": "Vysílačky",
+      "label": "Vysílačky"
+    }
+  ],
+  "Finance": [
+    {
+      "value": "banka",
+      "label": "banka"
+    },
+    {
+      "value": "daň z příjmu",
+      "label": "daň z příjmu"
+    },
+    {
+      "value": "drobné výdaje",
+      "label": "drobné výdaje"
+    },
+    {
+      "value": "srážková daň",
+      "label": "srážková daň"
+    },
+    {
+      "value": "účetní",
+      "label": "účetní"
+    }
+  ],
+  "CR": [
+    {
+      "value": "Schůzky",
+      "label": "Schůzky"
+    },
+    {
+      "value": "porady",
+      "label": "porady"
+    },
+    {
+      "value": "Tmelení týmu",
+      "label": "Tmelení týmu"
+    },
+    {
+      "value": "networking",
+      "label": "networking"
+    }
+  ],
+  "PR": [
+    {
+      "value": "CR",
+      "label": "CR"
+    },
+    {
+      "value": "EX",
+      "label": "EX"
+    },
+    {
+      "value": "HR",
+      "label": "HR"
+    },
+    {
+      "value": "LC",
+      "label": "LC"
+    },
+    {
+      "value": "PR",
+      "label": "PR"
+    },
+    {
+      "value": "Sociální sítě",
+      "label": "Sociální sítě"
+    },
+    {
+      "value": "Tým",
+      "label": "Tým"
+    }
+  ],
+  "HR": [
+    {
+      "value": "Hr akce",
+      "label": "Hr akce"
+    },
+    {
+      "value": "Nábory",
+      "label": "Nábory"
+    },
+    {
+      "value": "Porady",
+      "label": "Porady"
+    },
+    {
+      "value": "Skupina",
+      "label": "Skupina"
+    },
+    {
+      "value": "Teambuilding",
+      "label": "Teambuilding"
+    },
+    {
+      "value": "Učlenění",
+      "label": "Učlenění"
+    }
+  ],
+  "Exchange": [
+    {
+      "value": "Akce pro Stážisty",
+      "label": "Akce pro Stážisty"
+    },
+    {
+      "value": "Koordinátori SR",
+      "label": "Koordinátori SR"
+    },
+    {
+      "value": "Porady, Schuzky",
+      "label": "Porady, Schuzky"
+    },
+    {
+      "value": "Stážisti",
+      "label": "Stážisti"
+    },
+    {
+      "value": "Team",
+      "label": "Team"
+    }
+  ],
+  "Malta": [
+    {
+      "value": "Program",
+      "label": "Program"
+    },
+    {
+      "value": "Ubytování",
+      "label": "Ubytování"
+    },
+    {
+      "value": "Studenti",
+      "label": "Studenti"
+    },
+    {
+      "value": "Firmy",
+      "label": "Firmy"
+    },
+    {
+      "value": "Párty",
+      "label": "Párty"
+    },
+    {
+      "value": "Logistika",
+      "label": "Logistika"
+    },
+    {
+      "value": "Porady",
+      "label": "Porady"
+    },
+    {
+      "value": "Propagace",
+      "label": "Propagace"
+    }
+  ],
+  "Pink_Palace": [
+    {
+      "value": "internet",
+      "label": "internet"
+    },
+    {
+      "value": "Nájem",
+      "label": "Nájem"
+    },
+    {
+      "value": "opravy",
+      "label": "opravy"
+    }
+  ],
+  "PCH": [
+    {
+      "value": "účastníci",
+      "label": "účastníci"
+    },
+    {
+      "value": "jídlo",
+      "label": "jídlo"
+    },
+    {
+      "value": "ubytování",
+      "label": "ubytování"
+    },
+    {
+      "value": "program",
+      "label": "program"
+    },
+    {
+      "value": "logistika",
+      "label": "logistika"
     }
   ]
 } satisfies Record<string, Category[]>;
 
 export const departments: Department[] = [
   {
-    value: 'PR',
-    label: 'PR'
+    "value": "Board",
+    "label": "Board"
   },
   {
-    value: 'HR',
-    label: 'HR'
+    "value": "Akce",
+    "label": "Akce"
   },
   {
-    value: 'EX',
-    label: 'EX'
+    "value": "Office",
+    "label": "Office"
   },
   {
-    value: 'Akce',
-    label: 'Akce'
+    "value": "Kancl",
+    "label": "Kancl"
   },
   {
-    value: 'Projekty',
-    label: 'Projekty'
+    "value": "Ostatní",
+    "label": "Ostatní"
+  },
+  {
+    "value": "Veletrh",
+    "label": "Veletrh"
+  },
+  {
+    "value": "Finance",
+    "label": "Finance"
+  },
+  {
+    "value": "CR",
+    "label": "CR"
+  },
+  {
+    "value": "PR",
+    "label": "PR"
+  },
+  {
+    "value": "HR",
+    "label": "HR"
+  },
+  {
+    "value": "Exchange",
+    "label": "Exchange"
+  },
+  {
+    "value": "Malta",
+    "label": "Malta"
+  },
+  {
+    "value": "Pink_Palace",
+    "label": "Pink_Palace"
+  },
+  {
+    "value": "PCH",
+    "label": "PCH"
   }
 ];
 
@@ -224,15 +425,11 @@ export const categorySearchIndex: CategorySearchResult[] = Object.entries(catego
   ([department, categories]) => {
     const departmentLabel = departments.find((item) => item.value === department)?.label ?? department;
 
-    return categories.flatMap((category) =>
-      category.subcategories.map((subcategory) => ({
-        departmentValue: department,
-        departmentLabel,
-        categoryValue: category.value,
-        categoryLabel: category.label,
-        subcategoryValue: subcategory,
-        subcategoryLabel: subcategory,
-      })),
-    );
+    return categories.map((category) => ({
+      departmentValue: department,
+      departmentLabel,
+      categoryValue: category.value,
+      categoryLabel: category.label,
+    }));
   },
 );

@@ -1,13 +1,9 @@
 import { writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { readDevVars } from './dev-vars.mjs';
+import { parseCsv, extractCategories, validateCategoryTree } from './category-data.mjs';
 
-const DEFAULT_DEPARTMENT_SHEETS = ['PR', 'HR', 'EX', 'Akce', 'Projekty', 'Ces\u0165\u00e1k'];
 const devVars = loadDevVars();
-const departmentSheets = (process.env.CATEGORIES_DEPARTMENT_SHEETS ?? DEFAULT_DEPARTMENT_SHEETS.join(','))
-  .split(',')
-  .map((sheet) => sheet.trim())
-  .filter(Boolean);
 const optional = process.argv.includes('--optional');
 const spreadsheetId = readSpreadsheetIdArg(process.argv.slice(2));
 
@@ -26,22 +22,27 @@ async function main() {
     throw new Error('Missing spreadsheet ID. Use: npm run categories:sync -- <spreadsheetId>');
   }
 
-  const categoryTree = await fetchCategoryTree();
+  const categoryTree = validateCategoryTree(await fetchCategoryTree());
 
   await writeFile(resolve('src/categories.ts'), renderCategoriesFile(categoryTree), 'utf8');
 
   const categoryCount = Object.values(categoryTree).reduce((sum, categories) => sum + categories.length, 0);
-  const subcategoryCount = Object.values(categoryTree).reduce(
-    (sum, categories) => sum + categories.reduce((innerSum, category) => innerSum + category.subcategories.length, 0),
-    0,
-  );
-
-  console.log(
-    `Synced ${Object.keys(categoryTree).length} departments, ${categoryCount} categories and ${subcategoryCount} subcategories.`,
-  );
+  console.log(`Synced ${Object.keys(categoryTree).length} departments and ${categoryCount} categories.`);
 }
 
 async function fetchCategoryTree() {
+  // Public sheets can be synced without deploying Apps Script first.
+  const url = new URL(`https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}/gviz/tq`);
+  url.searchParams.set('tqx', 'out:csv');
+  url.searchParams.set('sheet', 'rozpocty');
+  try {
+    const response = await fetch(url);
+    if (response.ok && response.headers.get('content-type')?.includes('text/csv')) {
+      return extractCategories(parseCsv(await response.text()));
+    }
+  } catch {
+    // Private sheets use the authenticated Apps Script endpoint below.
+  }
   const appScriptUrl = process.env.APPS_SCRIPT_WEB_APP_URL ?? devVars.APPS_SCRIPT_WEB_APP_URL;
   const appScriptSecret = process.env.APPS_SCRIPT_SECRET ?? devVars.APPS_SCRIPT_SECRET;
 
@@ -58,7 +59,7 @@ async function fetchCategoryTree() {
       action: 'getCategories',
       secret: appScriptSecret,
       spreadsheetId,
-      departments: departmentSheets,
+      sheetName: 'rozpocty',
     }),
   });
 
@@ -83,7 +84,6 @@ function renderCategoriesFile(tree) {
   return `export type Category = {
   value: string;
   label: string;
-  subcategories: string[];
 };
 
 export type Department = {
@@ -96,8 +96,6 @@ export type CategorySearchResult = {
   departmentLabel: string;
   categoryValue: string;
   categoryLabel: string;
-  subcategoryValue: string;
-  subcategoryLabel: string;
 };
 
 export const categoryTree = ${formatValue(tree)} satisfies Record<string, Category[]>;
@@ -108,25 +106,19 @@ export const categorySearchIndex: CategorySearchResult[] = Object.entries(catego
   ([department, categories]) => {
     const departmentLabel = departments.find((item) => item.value === department)?.label ?? department;
 
-    return categories.flatMap((category) =>
-      category.subcategories.map((subcategory) => ({
-        departmentValue: department,
-        departmentLabel,
-        categoryValue: category.value,
-        categoryLabel: category.label,
-        subcategoryValue: subcategory,
-        subcategoryLabel: subcategory,
-      })),
-    );
+    return categories.map((category) => ({
+      departmentValue: department,
+      departmentLabel,
+      categoryValue: category.value,
+      categoryLabel: category.label,
+    }));
   },
 );
 `;
 }
 
 function formatValue(value) {
-  return JSON.stringify(value, null, 2)
-    .replace(/"([^"]+)":/g, '$1:')
-    .replace(/"/g, "'");
+  return JSON.stringify(value, null, 2);
 }
 
 function loadDevVars() {

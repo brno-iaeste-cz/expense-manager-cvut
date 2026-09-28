@@ -20,7 +20,7 @@ import {
 } from './receipt-file';
 
 const allowedEmailDomain = 'iaeste.cz';
-const logoSrc = '/iaeste-lc-brno-logo.png';
+const logoSrc = '/iaeste-lc-cvut-logo.png';
 
 const emptyForm = createEmptyForm();
 
@@ -60,7 +60,7 @@ const fieldHints = {
     </>
   ),
   categorySearch:
-    'Začněte psát název oddělení, kategorie nebo subkategorie a vyberte odpovídající položku ze seznamu.',
+    'Začněte psát název rozpočtu nebo podskupiny a vyberte odpovídající položku ze seznamu.',
 };
 
 function App() {
@@ -140,7 +140,7 @@ function GoogleAuthScreen() {
       <section className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md items-center">
         <div className="w-full rounded-lg border border-line bg-white p-5 shadow-panel sm:p-7">
           <div className="mb-7 text-center">
-            <img className="mx-auto h-auto w-full max-w-72 object-contain" src={logoSrc} alt="IAESTE LC Brno" />
+            <img className="mx-auto h-auto w-full max-w-72 object-contain" src={logoSrc} alt="IAESTE LC ČVUT" />
             <h1 className="mt-2 text-3xl font-bold text-ink">Expense manager</h1>
             <p className="mt-3 text-sm leading-6 text-ink/70">
               Přihlaste se Google účtem s doménou @{allowedEmailDomain}.
@@ -170,7 +170,7 @@ function AccessDenied({ user }: { user: User }) {
       <section className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md items-center">
         <div className="w-full rounded-lg border border-line bg-white p-5 shadow-panel sm:p-7">
           <div className="mb-7">
-            <p className="text-sm font-bold uppercase tracking-wide text-brand">IAESTE LC Brno</p>
+            <p className="text-sm font-bold uppercase tracking-wide text-brand">IAESTE LC ČVUT</p>
             <h1 className="mt-2 text-3xl font-bold text-ink">Přístup zamítnut</h1>
           </div>
 
@@ -204,7 +204,7 @@ function UnverifiedAccount({ user, onRefresh }: { user: User; onRefresh: () => v
       <section className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md items-center">
         <div className="w-full rounded-lg border border-line bg-white p-5 shadow-panel sm:p-7">
           <div className="mb-7">
-            <p className="text-sm font-bold uppercase tracking-wide text-brand">IAESTE LC Brno</p>
+            <p className="text-sm font-bold uppercase tracking-wide text-brand">IAESTE LC ČVUT</p>
             <h1 className="mt-2 text-3xl font-bold text-ink">Neověřený účet</h1>
           </div>
 
@@ -253,13 +253,11 @@ function ExpenseApp({ user }: { user: User }) {
   const selectedDepartment = departments.find((department) => department.value === form.department);
   const selectedCategories = categoryTree[form.department as keyof typeof categoryTree] ?? [];
   const selectedCategory = selectedCategories.find((category) => category.value === form.category);
-  const selectedSubcategories = selectedCategory?.subcategories ?? [];
   const selectedDepartmentLabel = selectedDepartment?.label ?? form.department;
   const selectedCategoryLabel = selectedCategory?.label ?? form.category;
-  const selectedSubcategoryLabel = form.subcategory;
   const categorySearchPlaceholder =
-    selectedDepartment && selectedCategory && form.subcategory
-      ? `${selectedDepartmentLabel} / ${selectedCategoryLabel} / ${selectedSubcategoryLabel}`
+    selectedDepartment && selectedCategory
+      ? `${selectedDepartmentLabel} / ${selectedCategoryLabel}`
       : 'Např. Prostory';
   const categorySearchResults = useMemo(() => {
     const query = normalizeText(categorySearch);
@@ -267,7 +265,7 @@ function ExpenseApp({ user }: { user: User }) {
 
     return categorySearchIndex
       .filter((item) =>
-        normalizeText(`${item.departmentLabel} ${item.categoryLabel} ${item.subcategoryLabel}`).includes(query),
+        normalizeText(`${item.departmentLabel} ${item.categoryLabel}`).includes(query),
       )
       .slice(0, 6);
   }, [categorySearch]);
@@ -292,9 +290,11 @@ function ExpenseApp({ user }: { user: User }) {
     return Boolean(
       (!needsReceipt || preparedReceipt) &&
       form.name.trim() &&
+      form.storeName.trim() &&
+      form.approvedBy.trim() &&
       form.expenseDate.trim() &&
       form.category.trim() &&
-      form.subcategory.trim() &&
+      form.department.trim() &&
         parseAmount(form.amount) > 0,
     );
   }, [form, needsReceipt, preparedReceipt]);
@@ -320,24 +320,19 @@ function ExpenseApp({ user }: { user: User }) {
   function updateDepartment(department: string) {
     const nextCategories = categoryTree[department as keyof typeof categoryTree] ?? [];
     const nextCategory = nextCategories[0];
-    const nextSubcategory = nextCategory?.subcategories[0] ?? '';
 
     setForm((current) => ({
       ...current,
       department,
       category: nextCategory?.value ?? '',
-      subcategory: nextSubcategory,
     }));
   }
 
   function updateCategory(category: string) {
-    const nextCategory = selectedCategories.find((item) => item.value === category);
-    const nextSubcategory = nextCategory?.subcategories[0] ?? '';
 
     setForm((current) => ({
       ...current,
       category,
-      subcategory: nextSubcategory,
     }));
   }
 
@@ -346,7 +341,6 @@ function ExpenseApp({ user }: { user: User }) {
       ...current,
       department: result.departmentValue,
       category: result.categoryValue,
-      subcategory: result.subcategoryValue,
     }));
     setCategorySearch('');
   }
@@ -498,7 +492,7 @@ function ExpenseApp({ user }: { user: User }) {
       <header className="border-b border-line bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-3 py-3 sm:gap-3 sm:px-6 sm:py-4">
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-            <img className="h-auto min-w-14 flex-1 object-contain sm:w-40 sm:flex-none" src={logoSrc} alt="IAESTE LC Brno" />
+            <img className="h-auto min-w-14 flex-1 object-contain sm:w-40 sm:flex-none" src={logoSrc} alt="IAESTE LC ČVUT" />
             <div className="w-[10.8rem] shrink-0 sm:w-[13.8rem]">
               <h1 className="whitespace-nowrap text-[1.32rem] font-bold leading-tight text-ink sm:text-[1.7rem]">Expense manager</h1>
               <p className="mt-0.5 truncate text-sm text-ink/70 sm:hidden">{formattedUser}</p>
@@ -524,7 +518,7 @@ function ExpenseApp({ user }: { user: User }) {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <Field label="Název" id="name">
+              <Field label="Název výdaje" id="name">
               <input
                 id="name"
                 className="field text-base"
@@ -536,6 +530,18 @@ function ExpenseApp({ user }: { user: User }) {
               </Field>
             </div>
 
+            <Field label="Název obchodu" id="storeName">
+              <input
+                id="storeName"
+                className="field text-base"
+                placeholder="Např. Kaufland"
+                value={form.storeName}
+                onChange={(event) => updateField('storeName', event.target.value)}
+                maxLength={160}
+                required
+              />
+            </Field>
+
             <Field label="Datum uskutečnění výdaje" id="expenseDate">
               <input
                 id="expenseDate"
@@ -543,6 +549,18 @@ function ExpenseApp({ user }: { user: User }) {
                 type="date"
                 value={form.expenseDate}
                 onChange={(event) => updateField('expenseDate', event.target.value)}
+                required
+              />
+            </Field>
+
+            <Field label="Kdo to schválil" id="approvedBy">
+              <input
+                id="approvedBy"
+                className="field text-base"
+                placeholder="Jméno schvalujícího"
+                value={form.approvedBy}
+                onChange={(event) => updateField('approvedBy', event.target.value)}
+                maxLength={160}
                 required
               />
             </Field>
@@ -590,15 +608,15 @@ function ExpenseApp({ user }: { user: User }) {
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                 <h3 className="text-base font-bold text-ink">Zařazení výdaje</h3>
               <span className="max-w-full break-words rounded-md bg-white px-2.5 py-1 text-xs font-bold text-ink/65 sm:text-right">
-                {form.department && form.category && form.subcategory
-                  ? `${selectedDepartmentLabel} / ${selectedCategoryLabel} / ${selectedSubcategoryLabel}`
+                {form.department && form.category
+                  ? `${selectedDepartmentLabel} / ${selectedCategoryLabel}`
                   : 'Nevybráno'}
               </span>
             </div>
 
             <div className="grid gap-4">
               <Field
-                label="Vyhledat kategorii"
+                label="Vyhledat rozpočet nebo podskupinu"
                 id="categorySearch"
                 hint={fieldHints.categorySearch}
               >
@@ -616,12 +634,12 @@ function ExpenseApp({ user }: { user: User }) {
                       {categorySearchResults.length > 0 ? (
                         categorySearchResults.map((result) => (
                           <button
-                            key={`${result.departmentValue}-${result.categoryValue}-${result.subcategoryValue}`}
+                            key={`${result.departmentValue}-${result.categoryValue}`}
                             className="block w-full px-3 py-3 text-left text-sm hover:bg-mist focus:bg-mist focus:outline-none"
                             onClick={() => applyCategorySearchResult(result)}
                             type="button"
                           >
-                            <span className="block font-bold text-ink">{result.subcategoryLabel}</span>
+                            <span className="block font-bold text-ink">{result.categoryLabel}</span>
                             <span className="block text-ink/65">
                               {result.departmentLabel} / {result.categoryLabel}
                             </span>
@@ -635,8 +653,8 @@ function ExpenseApp({ user }: { user: User }) {
                 </div>
               </Field>
 
-              <div className="grid gap-4 sm:grid-cols-3">
-                <Field label="Oddělení" id="department">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Rozpočet" id="department">
                   <select
                     id="department"
                     className="field text-base"
@@ -645,7 +663,7 @@ function ExpenseApp({ user }: { user: User }) {
                     required
                   >
                     <option value="" disabled>
-                      Vyberte oddělení
+                      Vyberte rozpočet
                     </option>
                     {departments.map((department) => (
                       <option key={department.value} value={department.value}>
@@ -655,7 +673,7 @@ function ExpenseApp({ user }: { user: User }) {
                   </select>
                 </Field>
 
-                <Field label="Kategorie" id="category">
+                <Field label="Podskupina" id="category">
                   <select
                     id="category"
                     className="field text-base"
@@ -664,7 +682,7 @@ function ExpenseApp({ user }: { user: User }) {
                     required
                   >
                     <option value="" disabled>
-                      Vyberte kategorii
+                      Vyberte podskupinu
                     </option>
                     {selectedCategories.map((category) => (
                       <option key={category.value} value={category.value}>
@@ -674,24 +692,6 @@ function ExpenseApp({ user }: { user: User }) {
                   </select>
                 </Field>
 
-                <Field label="Subkategorie" id="subcategory">
-                  <select
-                    id="subcategory"
-                    className="field text-base"
-                    value={form.subcategory}
-                    onChange={(event) => updateField('subcategory', event.target.value)}
-                    required
-                  >
-                    <option value="" disabled>
-                      Vyberte subkategorii
-                    </option>
-                    {selectedSubcategories.map((subcategory) => (
-                      <option key={subcategory} value={subcategory}>
-                        {subcategory}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
               </div>
             </div>
           </div>
@@ -1073,11 +1073,12 @@ function buildDefaultEmailBody(expenseName: string, amount: string, paymentMetho
 function createEmptyForm(): ExpenseForm {
   return {
     name: '',
+    storeName: '',
+    approvedBy: '',
     expenseDate: getTodayDateInputValue(),
     amount: '',
     department: '',
     category: '',
-    subcategory: '',
     paymentMethod: 'Invoice',
   };
 }

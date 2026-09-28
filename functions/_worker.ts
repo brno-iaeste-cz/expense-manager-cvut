@@ -37,11 +37,12 @@ const paymentMethodLabels: Record<string, string> = {
 
 const expenseSchema = z.object({
   name: z.string().min(1).max(160),
+  storeName: z.string().trim().min(1).max(160),
+  approvedBy: z.string().trim().min(1).max(160),
   expenseDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   amount: z.coerce.number().positive(),
   department: z.string().min(1).max(80),
   category: z.string().min(1).max(80),
-  subcategory: z.string().min(1).max(120),
   paymentMethod: z.string().min(1).max(80),
 });
 
@@ -128,11 +129,12 @@ app.post('/expenses', async (c) => {
 
   const parsedExpense = expenseSchema.safeParse({
     name: getFormValue(body, 'name'),
+    storeName: getFormValue(body, 'storeName'),
+    approvedBy: getFormValue(body, 'approvedBy'),
     expenseDate: getFormValue(body, 'expenseDate'),
     amount: getFormValue(body, 'amount'),
     department: getFormValue(body, 'department'),
     category: getFormValue(body, 'category'),
-    subcategory: getFormValue(body, 'subcategory'),
     paymentMethod: getFormValue(body, 'paymentMethod'),
   });
 
@@ -188,11 +190,12 @@ app.post('/expense-email', async (c) => {
   });
   const parsedExpense = expenseSchema.safeParse({
     name: getFormValue(body, 'name'),
+    storeName: getFormValue(body, 'storeName'),
+    approvedBy: getFormValue(body, 'approvedBy'),
     expenseDate: getFormValue(body, 'expenseDate'),
     amount: getFormValue(body, 'amount'),
     department: getFormValue(body, 'department'),
     category: getFormValue(body, 'category'),
-    subcategory: getFormValue(body, 'subcategory'),
     paymentMethod: getFormValue(body, 'paymentMethod'),
   });
 
