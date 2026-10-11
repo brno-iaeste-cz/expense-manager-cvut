@@ -1,4 +1,4 @@
-﻿# IAESTE LC Brno Expense Manager
+﻿# IAESTE LC CVUT Expense Manager
 
 Mobile-first receipt and company expense capture app.
 
@@ -10,7 +10,34 @@ Mobile-first receipt and company expense capture app.
 - Hono on a Cloudflare Pages advanced Worker
 - Google Apps Script for Google Sheets and Google Drive writes
 
-The browser app signs users in with Firebase using Google as the identity provider. Access is restricted to `@iaeste.cz` accounts in the browser and enforced again by the Cloudflare Pages Worker after it verifies the Firebase ID token. The Worker converts the uploaded receipt image to base64 and forwards the expense to a private Apps Script webhook. Apps Script saves the image to Drive and appends the row to the Sheet.
+The browser app signs users in with Firebase using Google as the identity provider. Access is restricted to `@iaeste.cz` accounts in the browser and enforced again by the Cloudflare Pages Worker after it verifies the Firebase ID token. The browser prepares the receipt PDF; the Worker encodes it as base64 and forwards the expense to an Apps Script webhook authenticated with a shared secret. Apps Script saves the PDF to Drive and records the expense in Sheets.
+
+## How the App Works: Systems and Request Flow
+
+### What Each System Does
+
+| System | Role in this app |
+| --- | --- |
+| React + TypeScript | Runs the browser interface: sign-in screens, expense form, receipt selection, preview, and submission feedback. TypeScript checks types during development and builds. |
+| Vite | Serves the browser app during development with hot reload and builds the production HTML, JavaScript, and CSS. Locally, it also forwards `/api` requests to the Worker. |
+| Tailwind CSS | Provides the styling utilities used to make the interface responsive for phones and computers. |
+| Firebase Authentication + Google Workspace | Handles Google sign-in and issues an ID token identifying the user. The app permits verified `@iaeste.cz` accounts. Firebase is used for authentication; expenses and receipts are stored in Google Sheets and Drive. |
+| Cloudflare Pages + Workers | Hosts the built browser files and runs the backend API in production. Wrangler runs the Worker locally for development. |
+| Hono | The small web framework inside the Worker that routes API requests, applies authentication, and returns JSON responses. Zod validates submitted fields, and jose verifies Firebase token signatures and claims. |
+| Google Apps Script | Receives authenticated submissions from the Worker and uses the deployment owner's Google permissions to save files and write spreadsheet rows. It also supports the separate expense email action. |
+| Google Drive + Google Sheets | Drive stores receipt PDFs in monthly folders. Sheets stores the expense details and the corresponding Drive link in a log and a monthly expense tab. |
+
+### From Entering the URL to a Saved PDF
+
+1. **Open the app URL.** The browser requests the page and loads its JavaScript and CSS. In production, Cloudflare Pages serves these files through the Worker's asset handler. During development, Vite serves them at port `5173`.
+2. **Sign in.** React initializes Firebase Authentication and restores an existing session or shows Google sign-in. After sign-in, Firebase provides an ID token. The interface checks the account's email domain and verification status before showing the expense form.
+3. **Fill in the expense and select receipts.** The browser converts selected images into one PDF, with one image per page in the selected order. It uses the browser's canvas to prepare JPEG image data and builds the PDF locally. A single existing PDF is uploaded unchanged. The prepared file stays in browser memory for preview and submission.
+4. **Submit to the API.** The browser sends the expense fields and PDF as multipart form data to `POST /api/expenses`, with the Firebase ID token in the `Authorization: Bearer ...` header. Locally, Vite proxies this request to the Wrangler Worker at `127.0.0.1:8788`; in production, the same site's Worker handles it directly.
+5. **Verify and forward.** Hono's authentication middleware verifies the token using Google's public keys, checks its expiry, issuer, and Firebase project, and requires a verified `@iaeste.cz` email. The route validates expense fields with Zod, encodes the PDF bytes as base64, and sends JSON containing the expense, verified user details, receipt, and server-side shared secret to Apps Script.
+6. **Save in Google Drive and Sheets.** Apps Script checks the shared secret and uses a lock to coordinate submissions. It selects or creates the expense month's Sheet tab and Drive folder, decodes the receipt bytes, and creates the PDF file in Drive. For example, an expense dated `2026-09-29` uses folder `2026_09_Září` and tab `Září 26`. It then writes the expense and Drive link to the log and monthly expense tab.
+7. **Show the result.** Apps Script returns the receipt's Drive file ID and URL to the Worker, which returns a success response to the browser. The interface shows a confirmation after the save completes, or an error if the request fails.
+
+The saved PDF lives in **Google Drive**. Submission does not automatically download a copy to the phone or PC disk; a local copy can be downloaded from Drive. Expenses submitted as **Bez dokladu** can be saved without a receipt file.
 
 ## Local Setup
 
