@@ -1,24 +1,22 @@
 const PROD_CONFIG = {
-  sheetId: '1qnBqstqYTWoSvUPxJOu8iRqrnFETrZzYptfH6YCHbQM',
-  sheetName: 'Expenses',
-  expensesSpreadsheetId: '1lIR4iRRP4cPpq8TcnPbe-b7Zd91-pdXb4mHJdIyNu1s', //dev: 1lIR4iRRP4cPpq8TcnPbe-b7Zd91-pdXb4mHJdIyNu1s, prod: 
-  driveFolderId: '1Cx_wPHTewsnvJD5rYhmta7_Vpde8mxt_', //dev: 1Cx_wPHTewsnvJD5rYhmta7_Vpde8mxt_, prod: 
-  emailRecipient: 'martin.tavoda@iaeste.cz', // finance.brno@iaeste.cz
-  senderAlias: 'it.brno@iaeste.cz',
-  secret: 'CHANGE_THIS_TO_A_LONG_RANDOM_SECRET_CVUT',
+  logSheetId: '1JLyjZACdYu1xU7fI5kItMuYBr6JzWklNew4fa1S0USA',
+  logSheetName: 'Expenses',
+  EXPENSES_SPREADSHEET_ID: '',
+  EXPENSES_RECEIPTS_FOLDER_ID: '',
+  emailRecipient: 'martin.tavoda@iaeste.cz',
+  secret: 'GACiQ19dp1g2ZjHANKFZQx1v5PcNJ0HMfUYc152F',
 };
 
 const DEV_CONFIG = {
-  sheetId: '1qnBqstqYTWoSvUPxJOu8iRqrnFETrZzYptfH6YCHbQM',
-  sheetName: 'Expenses',
-  expensesSpreadsheetId: '1lIR4iRRP4cPpq8TcnPbe-b7Zd91-pdXb4mHJdIyNu1s',
-  driveFolderId: '1Cx_wPHTewsnvJD5rYhmta7_Vpde8mxt_',
+  logSheetId: '1JLyjZACdYu1xU7fI5kItMuYBr6JzWklNew4fa1S0USA',
+  logSheetName: 'Expenses',
+  EXPENSES_SPREADSHEET_ID: '1PpkXeLnp4ZhtmvfJ5VW5SRenHh5FI1a18QFKbBGz8N4',
+  EXPENSES_RECEIPTS_FOLDER_ID: '1yomzfie_yklBFIJeYqqSQJVBP1DdriIm',
   emailRecipient: 'martin.tavoda@iaeste.cz',
-  senderAlias: 'it.brno@iaeste.cz',
-  secret: 'CHANGE_THIS_TO_A_LONG_RANDOM_SECRET_CVUT',
+  secret: 'GACiQ19dp1g2ZjHANKFZQx1v5PcNJ0HMfUYc152F',
 };
 
-const CONFIG = PROD_CONFIG; 
+const CONFIG = DEV_CONFIG; 
 
 function doPost(e) {
   let expenseLock = null;
@@ -45,7 +43,7 @@ function doPost(e) {
       return jsonResponse({ ok: false, error: 'Invalid request.' }, 400);
     }
 
-    const sheet = SpreadsheetApp.openById(CONFIG.sheetId).getSheetByName(CONFIG.sheetName);
+    const sheet = SpreadsheetApp.openById(CONFIG.logSheetId).getSheetByName(CONFIG.logSheetName);
     if (!sheet) {
       return jsonResponse({ ok: false, error: 'Sheet tab not found.' }, 500);
     }
@@ -57,7 +55,7 @@ function doPost(e) {
 
     let file = null;
     if (receipt && receipt.base64) {
-      const folder = getMonthlyReceiptFolder(DriveApp.getFolderById(CONFIG.driveFolderId), expense.expenseDate);
+      const folder = getMonthlyReceiptFolder(DriveApp.getFolderById(CONFIG.EXPENSES_RECEIPTS_FOLDER_ID), expense.expenseDate);
       const filename = buildReceiptFilename(expense, user, receipt.filename);
       const bytes = Utilities.base64Decode(receipt.base64);
       const blob = Utilities.newBlob(bytes, getReceiptMimeType(receipt), filename);
@@ -257,15 +255,7 @@ function sendExpenseEmail(payload) {
     getReceiptMimeType(receipt),
     buildReceiptFilename(expense, user, receipt.filename),
   );
-  const aliases = GmailApp.getAliases();
-  if (aliases.indexOf(CONFIG.senderAlias) === -1) {
-    throw new Error(`Sender alias is not available for this Apps Script account: ${CONFIG.senderAlias}`);
-  }
-
   GmailApp.sendEmail(CONFIG.emailRecipient, email.subject, email.body, {
-    from: CONFIG.senderAlias,
-    name: user.name || user.email || 'IAESTE Expense Manager',
-    replyTo: user.email || '',
     attachments: [attachment],
   });
 
@@ -303,7 +293,7 @@ function extractCategories(rows) {
 }
 
 function getExpensesSpreadsheetId() {
-  const configuredId = CONFIG.expensesSpreadsheetId;
+  const configuredId = CONFIG.EXPENSES_SPREADSHEET_ID;
   if (configuredId && configuredId !== 'PASTE_EXPENSES_SPREADSHEET_ID_HERE') {
     return configuredId;
   }

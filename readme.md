@@ -123,8 +123,8 @@ The script can be edited by anyone who has access through the `it.brno@iaeste.cz
 4. In the script, set:
    - `sheetId`
    - `sheetName`
-   - `expensesSpreadsheetId`
-   - `driveFolderId`
+   - `EXPENSES_SPREADSHEET_ID`
+   - `EXPENSES_RECEIPTS_FOLDER_ID`
    - `secret`
 5. Click **Deploy** -> **New deployment**.
 6. Select type **Web app**.
@@ -134,18 +134,18 @@ The script can be edited by anyone who has access through the `it.brno@iaeste.cz
 10. Copy the Web app URL into `APPS_SCRIPT_WEB_APP_URL`.
 11. Use the same script `secret` value for `APPS_SCRIPT_SECRET`.
 
-If you manage the existing Apps Script project with `clasp`, use the repo config in [apps-script/.clasp.json](apps-script/.clasp.json) and deploy updates from the `apps-script` directory:
+If you manage the existing Apps Script project with `clasp`, use [clasp-deploy.sh](clasp-deploy.sh) from the repository root. It requires Node.js and `clasp` on your PATH; on Windows, run it in Git Bash:
 
 ```bash
-cd apps-script
-clasp login
-clasp push
-clasp create-version "versionName"
-clasp create-deployment -V <version> -d "Development deployment" -i AKfycbw657CPSuhVofzoXoUZBeQ3pk7TG_1YyAil1atPyWQIJZchHExUzIk4yFYevQp0T7yj
-clasp create-deployment -V <version> -d "Production deployment" -i 
+bash clasp-deploy.sh "version name" devel
+APPS_SCRIPT_PROD_DEPLOYMENT_ID="your-production-deployment-id" bash clasp-deploy.sh "version name" prod
 ```
 
-Useful inspection commands:
+The script uses [apps-script/.clasp.json](apps-script/.clasp.json), reuses your existing clasp login (or starts login if needed), temporarily selects `DEV_CONFIG` or `PROD_CONFIG`, pushes the source, creates a version named `[devel] version name` or `[prod] version name`, and updates the selected deployment. The local source is restored when the script exits, including on failure.
+
+Development defaults to deployment `AKfycbw657CPSuhVofzoXoUZBeQ3pk7TG_1YyAil1atPyWQIJZchHExUzIk4yFYevQp0T7yj`; override it with `APPS_SCRIPT_DEV_DEPLOYMENT_ID` if needed. The production deployment ID is not recorded in this repository, so `prod` requires `APPS_SCRIPT_PROD_DEPLOYMENT_ID` and stops before login or push if it is missing. Use an existing Web app deployment ID, not the script ID or the full URL.
+
+Useful inspection commands (run from the `apps-script` directory):
 
 ```bash
 clasp deployments
@@ -154,13 +154,13 @@ clasp versions
 
 The web app URL is public, so the secret must be long and unguessable. A good value is at least 32 random characters.
 
-`expensesSpreadsheetId` points to the expense workbook. Each submission selects a Czech month/year tab using its expense date: `2026-09-29` goes to `Září 26`, and `2027-01-01` goes to `Leden 27`. A missing month tab is copied from the latest dated Czech month/year tab (regardless of tab position). Only the copy is cleared below row 1, including values, formulas, and cell notes; headers, formatting, column widths, and validation rules are retained. TEST and other non-month tabs are ignored. If no monthly tab exists yet, the first one is created with standard headers and a bold, frozen header row. Existing monthly tabs are reused; their headers must match the field names below. Invalid calendar dates are rejected.
+`EXPENSES_SPREADSHEET_ID` points to the expense workbook. Each submission selects a Czech month/year tab using its expense date: `2026-09-29` goes to `Září 26`, and `2027-01-01` goes to `Leden 27`. A missing month tab is copied from the latest dated Czech month/year tab (regardless of tab position). Only the copy is cleared below row 1, including values, formulas, and cell notes; headers, formatting, column widths, and validation rules are retained. TEST and other non-month tabs are ignored. If no monthly tab exists yet, the first one is created with standard headers and a bold, frozen header row. Existing monthly tabs are reused; their headers must match the field names below. Invalid calendar dates are rejected.
 
 Header whitespace is trimmed; legacy aliases are not accepted. The writer stores budget and subgroup in separate columns, preserves VAT, notes, and account columns, and ignores prefilled closure checkboxes when finding a free row. Missing or duplicate headers in an existing tab stop submission before any receipt upload or log write. A script lock protects month creation and row selection from concurrent submissions. Existing TEST records are not migrated; this routing applies to new submissions. The log workbook continues receiving all submissions in its configured log tab.
 
-Instead of hard-coding `expensesSpreadsheetId`, you can also set a Script Property named `EXPENSES_SPREADSHEET_ID`.
+Instead of hard-coding `EXPENSES_SPREADSHEET_ID`, you can also set a Script Property named `EXPENSES_SPREADSHEET_ID`.
 
-Receipts are saved inside monthly subfolders of `driveFolderId`, based on the expense date. Names use `YYYY_MM_Month` with capitalized Czech month names including diacritics, for example `2025_05_Květen` or `2026_09_Září`. The writer reuses a matching child folder or creates it under the submission lock. Submissions without a receipt do not create folders. Existing receipt files are not moved.
+Receipts are saved inside monthly subfolders of `EXPENSES_RECEIPTS_FOLDER_ID`, based on the expense date. Names use `YYYY_MM_Month` with capitalized Czech month names including diacritics, for example `2025_05_Květen` or `2026_09_Září`. The writer reuses a matching child folder or creates it under the submission lock. Submissions without a receipt do not create folders. Existing receipt files are not moved.
 
 ## Google Sheet
 
