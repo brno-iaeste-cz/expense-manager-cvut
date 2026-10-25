@@ -1,8 +1,8 @@
 const PROD_CONFIG = {
   logSheetId: '1JLyjZACdYu1xU7fI5kItMuYBr6JzWklNew4fa1S0USA',
   logSheetName: 'Expenses',
-  EXPENSES_SPREADSHEET_ID: '',
-  EXPENSES_RECEIPTS_FOLDER_ID: '',
+  EXPENSES_SPREADSHEET_ID: '1PpkXeLnp4ZhtmvfJ5VW5SRenHh5FI1a18QFKbBGz8N4',
+  EXPENSES_RECEIPTS_FOLDER_ID: '1yomzfie_yklBFIJeYqqSQJVBP1DdriIm',
   emailRecipient: 'martin.tavoda@iaeste.cz',
   secret: 'GACiQ19dp1g2ZjHANKFZQx1v5PcNJ0HMfUYc152F',
 };
