@@ -359,7 +359,7 @@ export default {
   fetch(request, env, executionContext) {
     const url = new URL(request.url);
 
-    if (url.pathname.startsWith('/api/')) {
+    if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
       return app.fetch(request, env, executionContext);
     }
 

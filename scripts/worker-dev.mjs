@@ -5,12 +5,13 @@ import { assertRequiredBindings, readDevVars } from './dev-vars.mjs';
 const vars = readDevVars();
 assertRequiredBindings(vars);
 
-const args = [
-  'dev',
-  'functions/_worker.ts',
-  '--port=8788',
-  '--compatibility-date=2026-04-16',
-];
+const args = ['dev', '--local', '--port=8788'];
+
+// Vite serves the frontend during development, so no dist build is required.
+// Preview uses the production assets directory from wrangler.jsonc.
+if (!process.argv.includes('--preview')) {
+  args.push('--assets=public');
+}
 
 const wranglerBin = resolve('node_modules/wrangler/bin/wrangler.js');
 const child = spawn(process.execPath, [wranglerBin, ...args], {

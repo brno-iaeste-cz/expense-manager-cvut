@@ -7,10 +7,10 @@ Mobile-first receipt and company expense capture app.
 - React + Vite
 - Tailwind CSS
 - Firebase Authentication with Google Workspace sign-in
-- Hono on a Cloudflare Pages advanced Worker
+- Hono on Cloudflare Workers with Static Assets
 - Google Apps Script for Google Sheets and Google Drive writes
 
-The browser app signs users in with Firebase using Google as the identity provider. Access is restricted to `@iaeste.cz` accounts in the browser and enforced again by the Cloudflare Pages Worker after it verifies the Firebase ID token. The browser prepares the receipt PDF; the Worker encodes it as base64 and forwards the expense to an Apps Script webhook authenticated with a shared secret. Apps Script saves the PDF to Drive and records the expense in Sheets.
+The browser app signs users in with Firebase using Google as the identity provider. Access is restricted to `@iaeste.cz` accounts in the browser and enforced again by the Cloudflare Worker after it verifies the Firebase ID token. The browser prepares the receipt PDF; the Worker encodes it as base64 and forwards the expense to an Apps Script webhook authenticated with a shared secret. Apps Script saves the PDF to Drive and records the expense in Sheets.
 
 ## How the App Works: Systems and Request Flow
 
@@ -22,14 +22,14 @@ The browser app signs users in with Firebase using Google as the identity provid
 | Vite | Serves the browser app during development with hot reload and builds the production HTML, JavaScript, and CSS. Locally, it also forwards `/api` requests to the Worker. |
 | Tailwind CSS | Provides the styling utilities used to make the interface responsive for phones and computers. |
 | Firebase Authentication + Google Workspace | Handles Google sign-in and issues an ID token identifying the user. The app permits verified `@iaeste.cz` accounts. Firebase is used for authentication; expenses and receipts are stored in Google Sheets and Drive. |
-| Cloudflare Pages + Workers | Hosts the built browser files and runs the backend API in production. Wrangler runs the Worker locally for development. |
+| Cloudflare Workers with Static Assets | Hosts the built browser files and runs the backend API in production. Wrangler runs the Worker locally for development. |
 | Hono | The small web framework inside the Worker that routes API requests, applies authentication, and returns JSON responses. Zod validates submitted fields, and jose verifies Firebase token signatures and claims. |
 | Google Apps Script | Receives authenticated submissions from the Worker and uses the deployment owner's Google permissions to save files and write spreadsheet rows. It also supports the separate expense email action. |
 | Google Drive + Google Sheets | Drive stores receipt PDFs in monthly folders. Sheets stores the expense details and the corresponding Drive link in a log and a monthly expense tab. |
 
 ### From Entering the URL to a Saved PDF
 
-1. **Open the app URL.** The browser requests the page and loads its JavaScript and CSS. In production, Cloudflare Pages serves these files through the Worker's asset handler. During development, Vite serves them at port `5173`.
+1. **Open the app URL.** The browser requests the page and loads its JavaScript and CSS. In production, Cloudflare Workers Static Assets serves these files. During development, Vite serves them at port `5173`.
 2. **Sign in.** React initializes Firebase Authentication and restores an existing session or shows Google sign-in. After sign-in, Firebase provides an ID token. The interface checks the account's email domain and verification status before showing the expense form.
 3. **Fill in the expense and select receipts.** The browser converts selected images into one PDF, with one image per page in the selected order. It uses the browser's canvas to prepare JPEG image data and builds the PDF locally. A single existing PDF is uploaded unchanged. The prepared file stays in browser memory for preview and submission.
 4. **Submit to the API.** The browser sends the expense fields and PDF as multipart form data to `POST /api/expenses`, with the Firebase ID token in the `Authorization: Bearer ...` header. Locally, Vite proxies this request to the Wrangler Worker at `127.0.0.1:8788`; in production, the same site's Worker handles it directly.
@@ -47,16 +47,18 @@ Install dependencies:
 npm install
 ```
 
-Create `.env.local` for the browser app:
+Create `.env.local` for Vite / frontend:
 
 ```bash
 VITE_FIREBASE_API_KEY=...
 VITE_FIREBASE_AUTH_DOMAIN=...
 VITE_FIREBASE_PROJECT_ID=...
 VITE_FIREBASE_APP_ID=...
+EXPENSES_SPREADSHEET_ID=...
+EXPENSES_RECEIPTS_FOLDER_ID=...
 ```
 
-Create `.dev.vars` for local Cloudflare Pages Worker bindings:
+Create `.dev.vars` for Wrangler / backend:
 
 ```bash
 FIREBASE_PROJECT_ID=...
@@ -77,11 +79,11 @@ This starts:
 
 Vite proxies `/api` requests to Wrangler, so the app can be used from `http://localhost:5173` with hot reload.
 
-Build and run the production-style Cloudflare Pages output locally:
+Build and run the production frontend and Worker together locally:
 
 ```bash
 npm run build
-npm run pages:dev
+npm run preview
 ```
 
 Open:
@@ -99,7 +101,7 @@ http://127.0.0.1:8788
 5. Open **Authentication** -> **Settings** -> **Authorized domains**.
 6. Add the domains you use to serve the app:
    - `localhost` for local Vite development
-   - your Cloudflare Pages domain
+   - your Cloudflare Worker domain (`workers.dev` or a custom domain)
    - any custom production domain
 7. In Google Cloud Console for the same Firebase project, open **APIs & Services** -> **OAuth consent screen** and make sure the app is configured for the IAESTE Google Workspace organization.
 
@@ -205,47 +207,78 @@ The form uses two levels, budget and subgroup, with search across both. Generate
 
 Deploy the updated Apps Script to enable monthly routing. Local mapping tests do not submit live expenses.
 
-## Cloudflare Pages
+## Cloudflare Workers
 
-Set these variables in Cloudflare Pages project settings:
+The application is deployed as one Worker named `em-iacvut`, configured in [wrangler.jsonc](wrangler.jsonc). Wrangler bundles the API from [worker/index.ts](worker/index.ts) and uploads the Vite frontend from `dist` as Static Assets. API routes (`/api` and `/api/*`) always reach the Worker; frontend navigation uses the SPA fallback to `index.html`.
 
-```bash
-FIREBASE_PROJECT_ID
-APPS_SCRIPT_WEB_APP_URL
-APPS_SCRIPT_SECRET
-VITE_FIREBASE_API_KEY
-VITE_FIREBASE_AUTH_DOMAIN
-VITE_FIREBASE_PROJECT_ID
-VITE_FIREBASE_APP_ID
+### Deploy from Git
+
+1. Open **Workers & Pages** in the Cloudflare dashboard and select **Create application**.
+2. Use the **Workers** flow and import this Git repository.
+3. Set the Worker name to `em-iacvut` and use the repository root as the root directory.
+4. Configure these commands:
+
+| Setting | Value |
+| --- | --- |
+| Build command | `npm run build` |
+| Deploy command | `npx wrangler deploy` |
+| Preview command (if preview builds are enabled) | `npx wrangler versions upload` |
+
+The preview command uploads a Worker version without promoting it to production. Version preview URLs are enabled by `preview_urls: true` in `wrangler.jsonc`. These versions use the configured backend bindings; use a separate Worker or Wrangler environment if branch builds should write to a separate Apps Script deployment. The asset directory is already configured as `dist` in `wrangler.jsonc`; there is no separate build output directory field to fill in. The build produces frontend files only. Wrangler compiles the backend during deployment, outside the public assets directory.
+
+### Frontend build variables
+
+Under **Settings > Build > Variables and secrets**, set the variables used by Vite:
+
+```dotenv
+VITE_FIREBASE_API_KEY=...
+VITE_FIREBASE_AUTH_DOMAIN=...
+VITE_FIREBASE_PROJECT_ID=...
+VITE_FIREBASE_APP_ID=...
+EXPENSES_SPREADSHEET_ID=...
+EXPENSES_RECEIPTS_FOLDER_ID=...
 ```
 
-Build command:
+These values are included in the browser bundle. Set them before the first build; changes require a new build and deployment. Locally they come from `.env.local`.
+
+### Backend runtime variables
+
+Under **Settings > Variables and Secrets**, configure:
+
+| Name | Type | Value |
+| --- | --- | --- |
+| `FIREBASE_PROJECT_ID` | Variable | Same project ID as `VITE_FIREBASE_PROJECT_ID` |
+| `APPS_SCRIPT_WEB_APP_URL` | Variable | Apps Script Web app URL ending in `/exec` |
+| `APPS_SCRIPT_SECRET` | Secret | The secret from the selected Apps Script configuration |
+
+Build variables and runtime variables are separate settings. The backend values must be configured at runtime so the API can access them. `keep_vars: true` in `wrangler.jsonc` preserves dashboard-managed variables across Wrangler deployments. Local development and preview read backend values from `.dev.vars`; this file is not uploaded as production configuration.
+
+After deployment, add the Worker hostname (for example, `em-iacvut.<your-subdomain>.workers.dev`) or your custom hostname to **Firebase Authentication > Settings > Authorized domains**. Configure frontend build values and backend runtime values for any preview environments you use as well.
+
+### Local verification and manual deployment
+
+Run the built frontend and API together locally:
 
 ```bash
 npm run build
+npm run preview
 ```
 
-Build output directory:
+Open `http://localhost:8788`. For live frontend editing, continue using `npm run dev` at `http://localhost:5173`; its API process uses the `public` directory for assets, so it does not require an existing `dist` build.
+
+To check packaging without publishing:
 
 ```bash
-dist
+npx wrangler deploy --dry-run
 ```
 
-Deploy command:
-
-```text
-Leave empty
-```
-
-Do not use `npx wrangler deploy` as the Pages deploy command. That command deploys a
-Workers project and will try to auto-configure this Hono app as a Worker. Cloudflare
-Pages should upload the `dist` directory after the build; the build already writes the
-advanced Pages Worker to `dist/_worker.js`.
-
-For a manual local deploy outside the Cloudflare Pages Git integration, use:
+For a manual deployment after configuring Cloudflare runtime variables and local frontend values:
 
 ```bash
-npm run deploy:pages
+npx wrangler login
+npm run deploy
 ```
 
-Also add your Cloudflare Pages domain to Firebase Authentication authorized domains before testing the deployed site.
+If replacing an existing Pages deployment, verify the new `workers.dev` site before moving its custom domain to the Worker. Existing Pages settings and variables are not transferred automatically.
+
+References: [Workers build configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/), [Static Assets routing](https://developers.cloudflare.com/workers/static-assets/binding/), and [Pages to Workers migration](https://developers.cloudflare.com/workers/static-assets/migration-guides/migrate-from-pages/).
